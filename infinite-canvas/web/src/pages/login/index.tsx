@@ -1,4 +1,4 @@
-import { LogIn, ShieldCheck } from "lucide-react";
+import { LogIn } from "lucide-react";
 import { useEffect, useState } from "react";
 import { App, Button, Form, Input } from "antd";
 import { Navigate, useLocation, useNavigate } from "react-router-dom";
@@ -42,8 +42,14 @@ export default function LoginPage() {
         <main className="flex min-h-dvh items-center justify-center bg-background bg-[radial-gradient(#e5e7eb_1px,transparent_1px)] px-6 py-10 text-foreground [background-size:16px_16px] dark:bg-[radial-gradient(rgba(245,245,244,.16)_1px,transparent_1px)]">
             <section className="w-full max-w-[420px] rounded-2xl border border-stone-200 bg-background p-7 shadow-sm dark:border-stone-800">
                 <div className="mb-7 flex items-center gap-3">
-                    <span className="grid size-11 place-items-center rounded-xl bg-stone-950 text-white dark:bg-stone-100 dark:text-stone-950">
-                        <ShieldCheck className="size-5" />
+                    <span className="grid size-11 shrink-0 place-items-center rounded-xl bg-stone-950 text-white dark:bg-stone-100 dark:text-stone-950" aria-hidden>
+                        <span
+                            className="size-6 bg-current"
+                            style={{
+                                mask: "url(/logo.svg) center / contain no-repeat",
+                                WebkitMask: "url(/logo.svg) center / contain no-repeat",
+                            }}
+                        />
                     </span>
                     <div>
                         <h1 className="text-xl font-semibold">登录无限画布</h1>
