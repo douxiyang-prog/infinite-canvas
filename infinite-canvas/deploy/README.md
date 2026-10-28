@@ -15,6 +15,23 @@ deploy/
 
 部署完成后的启停、日志、更新、备份和故障排查见 [维护手册](./MAINTENANCE.md)。
 
+## 替换公司名称和 Logo
+
+在 `.env` 中配置：
+
+```dotenv
+COMPANY_NAME=你的公司名称
+COMPANY_LOGO_URL=/brand/logo.svg
+```
+
+本地 Logo 放在 `deploy/brand/` 目录中，文件名需要与 `COMPANY_LOGO_URL` 一致。也可以填写完整的 `https://` 图片地址。
+
+修改后重建前端容器即可生效，不需要重新构建镜像：
+
+```bash
+sudo docker compose -f docker-compose.external-mysql.yml up -d --force-recreate app
+```
+
 ## 1. 在本机构建镜像
 
 把代码推送到 `douxiyang-prog/infinite-canvas` 的 `main` 分支。GitHub Actions 会自动构建：

@@ -14,5 +14,10 @@ services:
     restart: unless-stopped
     ports:
       - "3000:3000"
+    environment:
+      COMPANY_NAME: ${COMPANY_NAME:-}
+      COMPANY_LOGO_URL: ${COMPANY_LOGO_URL:-/brand/logo.svg}
+    volumes:
+      - ./brand:/usr/share/nginx/html/brand:ro
     depends_on:
       - api

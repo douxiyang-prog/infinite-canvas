@@ -136,6 +136,31 @@ sudo docker compose -f docker-compose.external-mysql.yml up -d --force-recreate 
 
 `.env` 包含数据库和管理员密码，不要上传到 Git，也不要通过公开渠道发送。
 
+## 修改公司名称和 Logo
+
+在 `.env` 中修改：
+
+```dotenv
+COMPANY_NAME=你的公司名称
+COMPANY_LOGO_URL=/brand/logo.svg
+```
+
+将本地 Logo 放到 `/opt/infinite-canvas-deploy/brand/`，例如：
+
+```text
+/opt/infinite-canvas-deploy/brand/logo.svg
+```
+
+支持 SVG、PNG 等浏览器可显示的图片。设置 `COMPANY_LOGO_URL` 为完整 `https://` 地址时，也可以直接使用远程图片。
+
+应用修改：
+
+```bash
+sudo docker compose -f docker-compose.external-mysql.yml up -d --force-recreate app
+```
+
+公司名称会同步用于顶部导航、登录页、首页标题和浏览器标签页。Logo 和名称属于运行配置，不需要重新构建前端镜像。
+
 ## 更新程序
 
 当前没有 GHCR 镜像，更新时临时下载源码并重新构建。构建完成后可以删除源码。

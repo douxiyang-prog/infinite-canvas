@@ -11,12 +11,20 @@ sanitize_id() {
     printf '%s' "$1" | tr -cd 'A-Za-z0-9-'
 }
 
+escape_js_string() {
+    printf '%s' "$1" | tr '\r\n' '  ' | sed 's/\\/\\\\/g; s/"/\\"/g'
+}
+
 GA4_ID=$(sanitize_id "${ANALYTICS_GA4_ID:-}")
 BAIDU_ID=$(sanitize_id "${ANALYTICS_BAIDU_ID:-}")
+COMPANY_NAME_VALUE=$(escape_js_string "${COMPANY_NAME:-}")
+COMPANY_LOGO_URL_VALUE=$(escape_js_string "${COMPANY_LOGO_URL:-/logo.svg}")
 
 cat > /usr/share/nginx/html/config.js <<EOF
 window.__RUNTIME_CONFIG__ = {
   ANALYTICS_GA4_ID: "${GA4_ID}",
-  ANALYTICS_BAIDU_ID: "${BAIDU_ID}"
+  ANALYTICS_BAIDU_ID: "${BAIDU_ID}",
+  COMPANY_NAME: "${COMPANY_NAME_VALUE}",
+  COMPANY_LOGO_URL: "${COMPANY_LOGO_URL_VALUE}"
 };
 EOF
