@@ -45,7 +45,7 @@ export default function LoginPage() {
         <main className="flex min-h-dvh items-center justify-center bg-background bg-[radial-gradient(#e5e7eb_1px,transparent_1px)] px-6 py-10 text-foreground [background-size:16px_16px] dark:bg-[radial-gradient(rgba(245,245,244,.16)_1px,transparent_1px)]">
             <section className="w-full max-w-[420px] rounded-2xl border border-stone-200 bg-background p-7 shadow-sm dark:border-stone-800">
                 <div className="mb-7 flex items-center gap-3">
-                    <span className="grid size-11 shrink-0 place-items-center rounded-xl border border-stone-200 bg-white dark:border-stone-700">
+                    <span className="grid size-11 shrink-0 place-items-center rounded-xl border border-stone-800 bg-stone-950">
                         <BrandLogo className="size-6" invertOnDark={false} />
                     </span>
                     <div>
