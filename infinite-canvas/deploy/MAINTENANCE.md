@@ -138,7 +138,9 @@ sudo docker compose -f docker-compose.external-mysql.yml up -d --force-recreate 
 
 ## 修改公司名称和 Logo
 
-在 `.env` 中修改：
+管理员登录后，从右上角账号菜单进入「管理 → 全局管理」，可以直接修改公司名称并上传 Logo。支持 PNG、JPEG、WebP，最大 2 MB。保存后品牌设置写入 MySQL，并同步应用到登录页、首页和顶部导航。
+
+如果数据库尚未设置品牌，可以在 `.env` 中配置默认值：
 
 ```dotenv
 COMPANY_NAME=你的公司名称
@@ -159,7 +161,7 @@ COMPANY_LOGO_URL=/brand/logo.svg
 sudo docker compose -f docker-compose.external-mysql.yml up -d --force-recreate app
 ```
 
-公司名称会同步用于顶部导航、登录页、首页标题和浏览器标签页。Logo 和名称属于运行配置，不需要重新构建前端镜像。
+数据库中的全局设置优先于 `.env` 默认值。管理员修改品牌后不需要重新构建镜像，也不需要重启容器。
 
 ## 更新程序
 

@@ -3,6 +3,7 @@ import { createBrowserRouter, Outlet } from "react-router-dom";
 import { RequireAuth } from "@/components/auth/require-auth";
 import { AnalyticsTracker } from "@/components/layout/analytics-tracker";
 import UserLayout from "@/layouts/user-layout";
+import AdminSettingsPage from "@/pages/admin/settings";
 import AdminUsersPage from "@/pages/admin/users";
 import AssetsPage from "@/pages/assets";
 import CanvasPage from "@/pages/canvas";
@@ -36,6 +37,7 @@ export const router = createBrowserRouter([
                     { path: "/canvas", element: <CanvasPage /> },
                     { path: "/canvas/:id", element: <CanvasProjectPage /> },
                     { path: "/config", element: <ConfigPage /> },
+                    { path: "/admin/settings", element: <AdminSettingsPage /> },
                     { path: "/admin/users", element: <AdminUsersPage /> },
                 ],
             },

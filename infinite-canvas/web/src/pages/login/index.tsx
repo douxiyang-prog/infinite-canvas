@@ -4,7 +4,7 @@ import { App, Button, Form, Input } from "antd";
 import { Navigate, useLocation, useNavigate } from "react-router-dom";
 
 import { BrandLogo } from "@/components/layout/brand-logo";
-import { COMPANY_NAME } from "@/constant/runtime-config";
+import { useBrandingStore } from "@/stores/use-branding-store";
 import { useUserStore } from "@/stores/use-user-store";
 
 type LoginValues = {
@@ -17,6 +17,7 @@ export default function LoginPage() {
     const navigate = useNavigate();
     const location = useLocation();
     const user = useUserStore((state) => state.user);
+    const companyName = useBrandingStore((state) => state.companyName);
     const login = useUserStore((state) => state.login);
     const loadSession = useUserStore((state) => state.loadSession);
     const [submitting, setSubmitting] = useState(false);
@@ -48,7 +49,7 @@ export default function LoginPage() {
                         <BrandLogo className="size-6" invertOnDark={false} />
                     </span>
                     <div>
-                        <h1 className="text-xl font-semibold">登录{COMPANY_NAME || "无限画布"}</h1>
+                        <h1 className="text-xl font-semibold">登录{companyName || "无限画布"}</h1>
                         <p className="mt-1 text-sm text-stone-500">使用管理员分配给你的账号继续</p>
                     </div>
                 </div>

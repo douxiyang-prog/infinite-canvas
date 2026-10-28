@@ -58,7 +58,7 @@ export function UserStatusActions({ showConfig = true, variant = "default", onOp
                             label: "管理",
                             children: [
                                 { key: "users", icon: <Users className="size-4" />, label: "用户管理", onClick: () => navigate("/admin/users") },
-                                { key: "global", icon: <SlidersHorizontal className="size-4" />, label: "全局管理", onClick: () => navigate("/config") },
+                                { key: "global", icon: <SlidersHorizontal className="size-4" />, label: "全局管理", onClick: () => navigate("/admin/settings") },
                             ],
                         },
                     ]

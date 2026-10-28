@@ -4,6 +4,14 @@ import {
   requireAdmin,
   requireUser,
 } from "./auth";
+import {
+  detectLogoMime,
+  getBranding,
+  getLogo,
+  MAX_LOGO_BYTES,
+  updateCompanyName,
+  updateLogo,
+} from "./branding";
 import { config } from "./config";
 import { bootstrapAdmin, db, migrate } from "./db";
 import {
@@ -47,6 +55,21 @@ async function handleApi(request: Request, url: URL) {
   if (request.method === "GET" && url.pathname === "/api/health") {
     await db.query("SELECT 1");
     return json({ ok: true });
+  }
+
+  if (request.method === "GET" && url.pathname === "/api/branding") {
+    return json(await getBranding());
+  }
+
+  if (request.method === "GET" && url.pathname === "/api/branding/logo") {
+    const logo = await getLogo();
+    return new Response(Uint8Array.from(logo.data), {
+      headers: {
+        "Content-Type": logo.mime,
+        "Cache-Control": "public, max-age=31536000, immutable",
+        "X-Content-Type-Options": "nosniff",
+      },
+    });
   }
 
   if (request.method === "POST" && url.pathname === "/api/auth/login") {
@@ -100,6 +123,26 @@ async function handleApi(request: Request, url: URL) {
   if (request.method === "GET" && url.pathname === "/api/admin/users") {
     await requireAdmin(request);
     return json({ users: await listUsers() });
+  }
+
+  if (request.method === "PATCH" && url.pathname === "/api/admin/branding") {
+    await requireAdmin(request);
+    const body = await readJson(request);
+    const companyName = textField(body, "companyName", "公司名称");
+    if (Array.from(companyName).length > 100)
+      throw new HttpError(400, "公司名称不能超过 100 个字符");
+    return json(await updateCompanyName(companyName));
+  }
+
+  if (request.method === "PUT" && url.pathname === "/api/admin/branding/logo") {
+    await requireAdmin(request);
+    const data = new Uint8Array(await request.arrayBuffer());
+    if (!data.length) throw new HttpError(400, "请选择 Logo 图片");
+    if (data.length > MAX_LOGO_BYTES)
+      throw new HttpError(413, "Logo 图片不能超过 2 MB");
+    const mime = detectLogoMime(data);
+    if (!mime) throw new HttpError(415, "Logo 仅支持 PNG、JPEG 或 WebP");
+    return json(await updateLogo(data, mime));
   }
 
   if (request.method === "POST" && url.pathname === "/api/admin/users") {

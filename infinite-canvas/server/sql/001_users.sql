@@ -26,3 +26,16 @@ CREATE TABLE IF NOT EXISTS user_sessions (
     KEY idx_sessions_expires_at (expires_at),
     CONSTRAINT fk_sessions_user FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS app_settings (
+    id TINYINT UNSIGNED NOT NULL,
+    company_name VARCHAR(100) NOT NULL DEFAULT '',
+    logo_data MEDIUMBLOB NULL,
+    logo_mime VARCHAR(64) NULL,
+    logo_updated_at DATETIME(3) NULL,
+    updated_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
+    PRIMARY KEY (id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+INSERT INTO app_settings (id) VALUES (1)
+ON DUPLICATE KEY UPDATE id = id;

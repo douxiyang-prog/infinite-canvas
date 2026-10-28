@@ -17,7 +17,9 @@ deploy/
 
 ## 替换公司名称和 Logo
 
-在 `.env` 中配置：
+管理员登录后，从右上角账号菜单进入「管理 → 全局管理」，可以直接修改公司名称并上传 Logo。支持 PNG、JPEG、WebP，Logo 最大 2 MB；保存后登录页、首页和顶部导航会立即更新。
+
+`.env` 中的以下配置作为数据库尚未设置品牌时的默认值：
 
 ```dotenv
 COMPANY_NAME=你的公司名称
@@ -26,7 +28,7 @@ COMPANY_LOGO_URL=/brand/logo.svg
 
 本地 Logo 放在 `deploy/brand/` 目录中，文件名需要与 `COMPANY_LOGO_URL` 一致。也可以填写完整的 `https://` 图片地址。
 
-修改后重建前端容器即可生效，不需要重新构建镜像：
+修改 `.env` 后重建前端容器即可生效，不需要重新构建镜像：
 
 ```bash
 sudo docker compose -f docker-compose.external-mysql.yml up -d --force-recreate app

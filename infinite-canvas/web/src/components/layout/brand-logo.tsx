@@ -1,8 +1,9 @@
-import { COMPANY_LOGO_URL } from "@/constant/runtime-config";
 import { cn } from "@/lib/utils";
+import { useBrandingStore } from "@/stores/use-branding-store";
 
 export function BrandLogo({ className, invertOnDark = true }: { className?: string; invertOnDark?: boolean }) {
-    const defaultLogo = COMPANY_LOGO_URL === "/logo.svg" || COMPANY_LOGO_URL === "/brand/logo.svg";
+    const logoUrl = useBrandingStore((state) => state.logoUrl);
+    const defaultLogo = logoUrl === "/logo.svg" || logoUrl === "/brand/logo.svg";
 
-    return <img src={COMPANY_LOGO_URL} alt="" aria-hidden className={cn("block shrink-0 object-contain", defaultLogo && invertOnDark && "dark:invert", className)} />;
+    return <img src={logoUrl} alt="" aria-hidden className={cn("block shrink-0 object-contain", defaultLogo && invertOnDark && "dark:invert", className)} />;
 }

@@ -8,15 +8,16 @@ import { AppConfigModal } from "@/components/layout/app-config-modal";
 import { MobileNavDrawer } from "@/components/layout/mobile-nav-drawer";
 import { BrandLogo } from "@/components/layout/brand-logo";
 import { UserStatusActions } from "@/components/layout/user-status-actions";
-import { COMPANY_NAME } from "@/constant/runtime-config";
 import { cn } from "@/lib/utils";
 import { useEffect, useRef, useState } from "react";
 import { useAgentStore } from "@/stores/use-agent-store";
+import { useBrandingStore } from "@/stores/use-branding-store";
 
 export function AppTopNav() {
     const { t } = useTranslation();
     const { pathname } = useLocation();
     const [mobileNavOpen, setMobileNavOpen] = useState(false);
+    const companyName = useBrandingStore((state) => state.companyName);
     const autoConnectRef = useRef(false);
     const agentToken = useAgentStore((state) => state.token);
     const agentEnabled = useAgentStore((state) => state.enabled);
@@ -42,7 +43,7 @@ export function AppTopNav() {
                         <div className="flex min-w-0 items-center">
                             <Link to="/" className="flex h-full shrink-0 items-center gap-2 text-sm font-semibold leading-none tracking-tight text-stone-950 transition hover:text-stone-600 dark:text-stone-100 dark:hover:text-stone-300">
                                 <BrandLogo className="h-5 w-auto max-w-24" />
-                                <span className="text-base font-medium">{COMPANY_NAME || t("meta.title")}</span>
+                                <span className="text-base font-medium">{companyName || t("meta.title")}</span>
                             </Link>
 
                             <button
