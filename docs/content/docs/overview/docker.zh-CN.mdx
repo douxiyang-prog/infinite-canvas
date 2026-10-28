@@ -7,12 +7,14 @@ description: 使用 Docker Compose 部署无限画布
 
 如果你希望在自己的机器或服务器上运行项目，可以直接使用 Docker Compose。
 
-## 使用发布镜像
+## 从源码构建
 
 ```bash
 git clone git@github.com:basketikun/infinite-canvas.git
 cd infinite-canvas
-docker compose up -d
+cp .env.example .env
+# 编辑 .env，填入 MySQL 连接信息和初始管理员
+docker compose up -d --build
 ```
 
 启动后访问：
@@ -23,11 +25,17 @@ http://localhost:3000
 
 ## 本地构建镜像
 
-如果需要基于当前源码构建镜像：
+如果需要单独使用本地构建配置：
 
 ```bash
+cp .env.example .env
+# 编辑 .env，填入 MySQL 连接信息和初始管理员
 docker compose -f docker-compose.local.yml up -d --build
 ```
+
+自定义版本由 Web 应用和 API 两个容器组成。请先在 MySQL 中创建 `MYSQL_DATABASE` 指定的数据库。首次启动且用户表为空时，服务会根据 `BOOTSTRAP_ADMIN_USERNAME` 和 `BOOTSTRAP_ADMIN_PASSWORD` 创建初始管理员；创建成功后可以删除这两项环境变量。
+
+通过 HTTPS 部署时请设置 `COOKIE_SECURE=true`。初始密码和数据库密码不应提交到 Git。
 
 ## 文档站镜像
 
@@ -49,7 +57,7 @@ docker compose -f docker-compose.local.yml up -d --build
 
 ## 数据说明
 
-当前主应用镜像只启动 Next.js。画布、我的素材、生成记录和 AI API Key 默认保存在浏览器本地；第三方提示词由浏览器前端直连拉取，不需要额外挂载数据目录。
+当前自定义应用提供 Vite 前端、Nginx 和认证 API。用户资料、密码哈希和登录会话保存在 MySQL；画布、我的素材、生成记录和 AI API Key 仍默认保存在浏览器本地，后续版本再迁移到 NAS。第三方提示词仍由浏览器前端直连拉取。
 
 ## 统计分析（可选）
 

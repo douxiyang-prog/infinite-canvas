@@ -5,12 +5,14 @@ description: Deploy Infinite Canvas with Docker Compose
 
 # Docker Deployment
 
-## Use the published image
+## Build from source
 
 ```bash
 git clone git@github.com:basketikun/infinite-canvas.git
 cd infinite-canvas
-docker compose up -d
+cp .env.example .env
+# Edit .env with the MySQL connection and initial administrator
+docker compose up -d --build
 ```
 
 Open `http://localhost:3000`.
@@ -18,8 +20,14 @@ Open `http://localhost:3000`.
 ## Build locally
 
 ```bash
+cp .env.example .env
+# Edit .env with the MySQL connection and initial administrator
 docker compose -f docker-compose.local.yml up -d --build
 ```
+
+The customized deployment runs the web application and an API container. Create the database named by `MYSQL_DATABASE` first. When the users table is empty, the API creates the first administrator from `BOOTSTRAP_ADMIN_USERNAME` and `BOOTSTRAP_ADMIN_PASSWORD`; remove those variables after bootstrap.
+
+Set `COOKIE_SECURE=true` for HTTPS deployments. Do not commit the initial password or database password.
 
 ## Documentation image
 
@@ -37,7 +45,7 @@ cd docs
 docker compose -f docker-compose.local.yml up -d --build
 ```
 
-The main application container only runs Next.js. Canvases, My Assets, generation history, and API keys are stored in the browser by default, while prompt repositories are fetched directly by the frontend. No persistent data volume is required for this data.
+The customized application provides the Vite frontend, Nginx, and an authentication API. User profiles, password hashes, and login sessions are stored in MySQL. Canvases, assets, generation history, and AI API keys remain browser-local until project storage moves to the NAS. Prompt sources are still fetched directly by the browser.
 
 ## Optional analytics
 

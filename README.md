@@ -145,12 +145,16 @@ bun run dev
 ```bash
 git clone git@github.com:basketikun/infinite-canvas.git
 cd infinite-canvas
-docker compose up -d
+cp .env.example .env
+# 编辑 .env，配置 MySQL 和首个管理员
+docker compose up -d --build
 ```
 
-运行后默认端口3000，可访问 `http://localhost:3000`。
+运行后默认端口3000，可访问 `http://localhost:3000`。先使用 `.env` 中配置的管理员登录，再从右上角账号菜单进入用户管理。
 
 首次打开后进入右上角配置，填入自己的 OpenAI 兼容 `Base URL` 和 `API Key`。
+
+用户资料和登录会话保存在 MySQL；画布和媒体仍保存在浏览器本地，后续再迁移到 NAS。
 
 如果默认的OpenAI接口调用方式与您的API不同，可自定义生图/视频脚本调用。
 

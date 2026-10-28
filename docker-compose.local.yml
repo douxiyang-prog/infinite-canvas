@@ -7,3 +7,14 @@ services:
     ports:
       - "3000:3000"
     restart: unless-stopped
+    depends_on:
+      - api
+
+  api:
+    image: infinite-canvas-api:local
+    build:
+      context: ./server
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    env_file:
+      - .env
