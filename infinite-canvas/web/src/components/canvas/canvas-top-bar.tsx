@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { BookOpen, Bot, Download, Home, Images, Menu, PanelLeftClose, PanelLeftOpen, Plus, Redo2, Trash2, Undo2, Upload } from "lucide-react";
 import { Button, Dropdown, Modal, Tooltip } from "antd";
 import { useTranslation } from "react-i18next";
@@ -105,7 +105,7 @@ export function CanvasTopBar({
                             ],
                         }}
                     >
-                        <button type="button" className="grid size-7 place-items-center rounded-full transition hover:bg-black/5 dark:hover:bg-white/10" style={{ color: theme.node.text }} aria-label={t("canvas.openMenu")}>
+                        <button type="button" className="grid size-7 place-items-center rounded-full transition hover:bg-black/5 @min-[700px]:hidden dark:hover:bg-white/10" style={{ color: theme.node.text }} aria-label={t("canvas.openMenu")}>
                             <Menu className="size-4" />
                         </button>
                     </Dropdown>
@@ -135,7 +135,32 @@ export function CanvasTopBar({
                             </button>
                         )}
                     </div>
-                    <CompactAgentStatus status={compactAgentStatus} onClick={onToggleAgent} />
+                    {agentOpen ? null : <CompactAgentStatus status={compactAgentStatus} onClick={onToggleAgent} />}
+                    <span className="mx-1 hidden h-5 w-px shrink-0 @min-[700px]:block" style={{ background: theme.toolbar.border }} />
+                    <div className="hidden min-w-0 items-center gap-0.5 @min-[700px]:flex @min-[1150px]:hidden" role="toolbar" aria-label={t("canvas.openMenu")}>
+                        <CanvasMenuButton icon={<Home className="size-3.5" />} label={t("canvas.home")} onClick={onHome} iconOnly />
+                        <CanvasMenuButton icon={<Images className="size-3.5" />} label={t("canvas.projects")} onClick={onProjects} iconOnly />
+                        <span className="mx-1 h-4 w-px shrink-0" style={{ background: theme.toolbar.border }} />
+                        <CanvasMenuButton icon={<Plus className="size-3.5" />} label={t("canvas.toolbarCreate")} onClick={onCreateProject} iconOnly />
+                        <CanvasMenuButton icon={<Trash2 className="size-3.5" />} label={t("canvas.toolbarDelete")} onClick={onDeleteProject} danger iconOnly />
+                        <CanvasMenuButton icon={<Upload className="size-3.5" />} label={t("canvas.toolbarImport")} onClick={onImportImage} iconOnly />
+                        <CanvasMenuButton icon={<Download className="size-3.5" />} label={t("canvas.toolbarExport")} onClick={onExportProject} iconOnly />
+                        <span className="mx-1 h-4 w-px shrink-0" style={{ background: theme.toolbar.border }} />
+                        <CanvasMenuButton icon={<Undo2 className="size-3.5" />} label={t("canvas.undo")} onClick={onUndo} disabled={!canUndo} iconOnly />
+                        <CanvasMenuButton icon={<Redo2 className="size-3.5" />} label={t("canvas.redo")} onClick={onRedo} disabled={!canRedo} iconOnly />
+                    </div>
+                    <div className="hidden min-w-0 items-center gap-0.5 @min-[1150px]:flex" role="toolbar" aria-label={t("canvas.openMenu")}>
+                        <CanvasMenuButton icon={<Home className="size-3.5" />} label={t("canvas.home")} onClick={onHome} />
+                        <CanvasMenuButton icon={<Images className="size-3.5" />} label={t("canvas.projects")} onClick={onProjects} />
+                        <span className="mx-1 h-4 w-px shrink-0" style={{ background: theme.toolbar.border }} />
+                        <CanvasMenuButton icon={<Plus className="size-3.5" />} label={t("canvas.toolbarCreate")} onClick={onCreateProject} />
+                        <CanvasMenuButton icon={<Trash2 className="size-3.5" />} label={t("canvas.toolbarDelete")} onClick={onDeleteProject} danger />
+                        <CanvasMenuButton icon={<Upload className="size-3.5" />} label={t("canvas.toolbarImport")} onClick={onImportImage} />
+                        <CanvasMenuButton icon={<Download className="size-3.5" />} label={t("canvas.toolbarExport")} onClick={onExportProject} />
+                        <span className="mx-1 h-4 w-px shrink-0" style={{ background: theme.toolbar.border }} />
+                        <CanvasMenuButton icon={<Undo2 className="size-3.5" />} label={t("canvas.undo")} onClick={onUndo} disabled={!canUndo} iconOnly />
+                        <CanvasMenuButton icon={<Redo2 className="size-3.5" />} label={t("canvas.redo")} onClick={onRedo} disabled={!canRedo} iconOnly />
+                    </div>
                 </div>
 
                 <div className="pointer-events-auto flex items-center gap-1.5">
@@ -143,12 +168,12 @@ export function CanvasTopBar({
                     <span className="h-6 w-px" style={{ background: theme.toolbar.border }} />
                     <Button
                         type="text"
-                        className="!h-10 !rounded-xl !px-3 !font-medium"
+                        className={`!h-10 !rounded-xl !font-medium ${agentOpen ? "!w-10 !min-w-10 !px-0" : "!px-3"}`}
                         style={{ background: agentOpen ? theme.toolbar.activeBg : theme.toolbar.panel, color: theme.node.text, boxShadow: "0 10px 30px rgba(28,25,23,.10)" }}
                         icon={<Bot className="size-4" />}
                         onClick={onToggleAgent}
                     >
-                        Agent
+                        {agentOpen ? null : "Agent"}
                     </Button>
                 </div>
             </div>
@@ -172,6 +197,26 @@ export function CanvasTopBar({
                 </div>
             </Modal>
         </>
+    );
+}
+
+function CanvasMenuButton({ icon, label, onClick, disabled = false, danger = false, iconOnly = false }: { icon: ReactNode; label: string; onClick: () => void; disabled?: boolean; danger?: boolean; iconOnly?: boolean }) {
+    const colorTheme = useThemeStore((state) => state.theme);
+    const theme = canvasThemes[colorTheme];
+    return (
+        <Tooltip title={label} mouseEnterDelay={0.35}>
+            <button
+                type="button"
+                className={`flex h-8 shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-md px-2 text-xs transition hover:bg-black/5 disabled:cursor-not-allowed disabled:opacity-35 dark:hover:bg-white/10 ${danger ? "text-red-600 dark:text-red-400" : ""} ${iconOnly ? "w-8" : ""}`}
+                style={danger ? undefined : { color: theme.node.text }}
+                onClick={onClick}
+                disabled={disabled}
+                aria-label={label}
+            >
+                {icon}
+                {iconOnly ? null : <span>{label}</span>}
+            </button>
+        </Tooltip>
     );
 }
 
