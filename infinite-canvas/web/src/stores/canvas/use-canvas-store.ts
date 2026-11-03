@@ -3,6 +3,7 @@ import { persist, type PersistStorage, type StorageValue } from "zustand/middlew
 
 import { nanoid } from "nanoid";
 import i18n from "@/i18n";
+import { ApiError } from "@/services/api/auth";
 import { deleteProject as deleteServerProject, fetchProjects, saveProject as saveServerProject } from "@/services/api/projects";
 import type { CanvasBackgroundMode } from "@/lib/canvas-theme";
 import type { CanvasAssistantSession, CanvasConnection, CanvasNodeData, ViewportTransform } from "@/types/canvas";
@@ -52,18 +53,32 @@ function reportStorageError(error: unknown) {
     window.dispatchEvent(new CustomEvent("canvas-storage-error", { detail: error instanceof Error ? error.message : String(error) }));
 }
 
+function reportStorageConflict(projectId: string, error: unknown) {
+    window.dispatchEvent(new CustomEvent("canvas-storage-conflict", { detail: { projectId, message: error instanceof Error ? error.message : String(error) } }));
+}
+
 async function persistProjectChanges(previous: PersistedCanvasState, next: PersistedCanvasState) {
     const previousById = new Map(previous.projects.map((project) => [project.id, project]));
     const nextIds = new Set(next.projects.map((project) => project.id));
     for (const project of next.projects) {
         if (previousById.get(project.id) === project) continue;
-        const result = await saveServerProject(project, projectVersions.get(project.id) || 0);
-        projectVersions.set(project.id, result.version);
+        try {
+            const result = await saveServerProject(project, projectVersions.get(project.id) || 0);
+            projectVersions.set(project.id, result.version);
+        } catch (error) {
+            if (error instanceof ApiError && error.status === 409) reportStorageConflict(project.id, error);
+            throw error;
+        }
     }
     for (const project of previous.projects) {
         if (nextIds.has(project.id)) continue;
-        await deleteServerProject(project.id, projectVersions.get(project.id) || 0);
-        projectVersions.delete(project.id);
+        try {
+            await deleteServerProject(project.id, projectVersions.get(project.id) || 0);
+            projectVersions.delete(project.id);
+        } catch (error) {
+            if (error instanceof ApiError && error.status === 409) reportStorageConflict(project.id, error);
+            throw error;
+        }
     }
 }
 
@@ -95,7 +110,9 @@ const canvasStorage: PersistStorage<CanvasStore> = {
                     await persistProjectChanges(previous, snapshot);
                     lastPersistedState = snapshot;
                 })
-                .catch((error) => reportStorageError(error));
+                .catch((error) => {
+                    if (!(error instanceof ApiError && error.status === 409)) reportStorageError(error);
+                });
         }, 400);
     },
     removeItem: async () => undefined,

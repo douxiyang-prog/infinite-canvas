@@ -7,9 +7,10 @@ import { useConfigStore } from "@/stores/use-config-store";
 import { usePromptSourceScheduler } from "@/hooks/use-prompt-source-scheduler";
 
 export function ClientRootInit({ children }: { children: ReactNode }) {
-    const { message } = App.useApp();
+    const { message, modal } = App.useApp();
     const { i18n, t } = useTranslation();
     const handledConfigParams = useRef(false);
+    const shownConflicts = useRef(new Set<string>());
     const importChannelCredentials = useConfigStore((state) => state.importChannelCredentials);
     const openConfigDialog = useConfigStore((state) => state.openConfigDialog);
 
@@ -24,6 +25,27 @@ export function ClientRootInit({ children }: { children: ReactNode }) {
         window.addEventListener("canvas-storage-error", handleStorageError);
         return () => window.removeEventListener("canvas-storage-error", handleStorageError);
     }, [i18n.resolvedLanguage, message]);
+
+    useEffect(() => {
+        const handleStorageConflict = (event: Event) => {
+            const detail = (event as CustomEvent<{ projectId?: string; message?: string }>).detail;
+            const projectId = detail?.projectId || "unknown";
+            if (shownConflicts.current.has(projectId)) return;
+            shownConflicts.current.add(projectId);
+            const english = i18n.resolvedLanguage === "en-US";
+            modal.confirm({
+                title: english ? "Canvas version conflict" : "画布版本冲突",
+                content: english
+                    ? "This canvas was updated in another page. The current page has stopped saving to avoid overwriting newer content. Reload to continue with the latest version."
+                    : "该画布已在其他页面更新。为避免覆盖较新的内容，当前页面已停止继续保存。请重新加载最新版本后继续编辑。",
+                okText: english ? "Reload" : "重新加载",
+                cancelText: english ? "Keep viewing" : "暂不处理",
+                onOk: () => window.location.reload(),
+            });
+        };
+        window.addEventListener("canvas-storage-conflict", handleStorageConflict);
+        return () => window.removeEventListener("canvas-storage-conflict", handleStorageConflict);
+    }, [i18n.resolvedLanguage, modal]);
 
     useEffect(() => {
         if (handledConfigParams.current) return;
