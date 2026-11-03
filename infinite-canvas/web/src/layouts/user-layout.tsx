@@ -4,10 +4,12 @@ import { useEffect, useRef } from "react";
 import { AgentPanel } from "@/components/agent/agent-panel";
 import { AppSidebar } from "@/components/layout/app-sidebar";
 import { AppTopNav } from "@/components/layout/app-top-nav";
+import { useGlobalConfigSync } from "@/hooks/use-global-config-sync";
 import { prepareCanvasStoreForSession, useCanvasStore } from "@/stores/canvas/use-canvas-store";
 
 export default function UserLayout({ children }: { children: ReactNode }) {
     const bootstrapped = useRef(false);
+    useGlobalConfigSync();
     useEffect(() => {
         if (bootstrapped.current) return;
         bootstrapped.current = true;

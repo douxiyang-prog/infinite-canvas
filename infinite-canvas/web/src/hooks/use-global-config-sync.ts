@@ -1,0 +1,88 @@
+import { useEffect } from "react";
+import { App } from "antd";
+import { useTranslation } from "react-i18next";
+
+import { fetchGlobalConfig, saveGlobalConfig } from "@/services/api/global-config";
+import { useConfigStore } from "@/stores/use-config-store";
+import { useUserStore } from "@/stores/use-user-store";
+
+export function useGlobalConfigSync() {
+    const { message } = App.useApp();
+    const { i18n } = useTranslation();
+    const user = useUserStore((state) => state.user);
+
+    useEffect(() => {
+        if (!user || user.role !== "admin") return;
+        let active = true;
+        let ready = false;
+        let version = 0;
+        let saveTimer: ReturnType<typeof setTimeout> | null = null;
+        let saving = false;
+        let pending = false;
+
+        const english = i18n.resolvedLanguage === "en-US";
+
+        const flush = async () => {
+            if (!active || !ready) return;
+            if (saving) {
+                pending = true;
+                return;
+            }
+            saving = true;
+            const { config, webdav } = useConfigStore.getState();
+            try {
+                const saved = await saveGlobalConfig({ expectedVersion: version, config, webdav });
+                version = saved.version;
+            } catch (error) {
+                ready = false;
+                const description = error instanceof Error ? error.message : String(error);
+                message.error(english ? `Global settings save failed: ${description}` : `全局设置保存失败：${description}`);
+            } finally {
+                saving = false;
+                if (pending && ready && active) {
+                    pending = false;
+                    saveTimer = setTimeout(() => {
+                        saveTimer = null;
+                        void flush();
+                    }, 700);
+                }
+            }
+        };
+
+        const scheduleSave = (delay = 700) => {
+            if (!ready || user.role !== "admin") return;
+            if (saveTimer) clearTimeout(saveTimer);
+            saveTimer = setTimeout(() => {
+                saveTimer = null;
+                void flush();
+            }, delay);
+        };
+
+        const unsubscribe = useConfigStore.subscribe((state, previous) => {
+            if (state.config === previous.config && state.webdav === previous.webdav) return;
+            scheduleSave();
+        });
+
+        fetchGlobalConfig()
+            .then((snapshot) => {
+                if (!active) return;
+                version = snapshot.version;
+                if (snapshot.config) {
+                    useConfigStore.getState().applyGlobalConfig(snapshot.config, snapshot.webdav || {});
+                }
+                ready = true;
+                if (!snapshot.config && user.role === "admin") scheduleSave(0);
+            })
+            .catch((error) => {
+                if (!active) return;
+                const description = error instanceof Error ? error.message : String(error);
+                message.error(english ? `Could not load global settings: ${description}` : `全局设置加载失败：${description}`);
+            });
+
+        return () => {
+            active = false;
+            unsubscribe();
+            if (saveTimer) clearTimeout(saveTimer);
+        };
+    }, [i18n.resolvedLanguage, message, user]);
+}

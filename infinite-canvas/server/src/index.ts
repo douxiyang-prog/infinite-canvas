@@ -49,6 +49,7 @@ import {
 } from "./projects";
 import { getFile, saveFile } from "./files";
 import { purgeExpiredTrash, restoreProject } from "./trash";
+import { getGlobalConfig, saveGlobalConfig } from "./global-config";
 
 function roleValue(value: unknown, fallback?: UserRole): UserRole | undefined {
   if (value === undefined) return fallback;
@@ -86,6 +87,29 @@ async function handleApi(request: Request, url: URL) {
 
   if (request.method === "GET" && url.pathname === "/api/setup/status") {
     return json(await setupStatus());
+  }
+
+  if (request.method === "GET" && url.pathname === "/api/config") {
+    await requireAdmin(request);
+    return json(await getGlobalConfig());
+  }
+
+  if (request.method === "PUT" && url.pathname === "/api/config") {
+    const user = await requireAdmin(request);
+    const body = await readJson(request);
+    const expectedVersion = optionalNumberField(body, "expectedVersion", -1);
+    if (!Number.isInteger(expectedVersion) || expectedVersion < 0)
+      throw new HttpError(400, "expectedVersion 无效");
+    return json(
+      await saveGlobalConfig(
+        {
+          expectedVersion,
+          config: body.config,
+          webdav: body.webdav,
+        },
+        user.id,
+      ),
+    );
   }
 
   if (request.method === "GET" && url.pathname === "/api/admin/storage") {

@@ -44,4 +44,6 @@ export const config = {
   bootstrapDisplayName:
     process.env.BOOTSTRAP_ADMIN_DISPLAY_NAME?.trim() || "管理员",
   storageAllowedRoots: storageAllowedRoots(),
+  settingsEncryptionKey:
+    process.env.SETTINGS_ENCRYPTION_KEY?.trim() || "",
 };

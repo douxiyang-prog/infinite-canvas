@@ -144,6 +144,7 @@ type ConfigStore = {
     updateConfig: <K extends keyof AiConfig>(key: K, value: AiConfig[K]) => void;
     importChannelCredentials: (input: { baseUrl?: string | null; apiKey?: string | null }) => ChannelCredentialsImportResult;
     updateWebdavConfig: <K extends keyof WebdavSyncConfig>(key: K, value: WebdavSyncConfig[K]) => void;
+    applyGlobalConfig: (config: Partial<AiConfig>, webdav: Partial<WebdavSyncConfig>) => void;
     isAiConfigReady: (config: AiConfig, model: string) => boolean;
     openConfigDialog: (shouldPromptContinue?: boolean, tab?: ConfigTabKey) => void;
     setConfigDialogOpen: (isOpen: boolean) => void;
@@ -212,6 +213,47 @@ function isAiConfigReady(config: AiConfig, model: string) {
     return Boolean(match && match.channel.baseUrl.trim() && match.channel.apiKey.trim());
 }
 
+function normalizeGlobalConfig(
+    persistedConfigInput: Partial<AiConfig> | null | undefined,
+    persistedWebdavInput: Partial<WebdavSyncConfig> | null | undefined,
+): { config: AiConfig; webdav: WebdavSyncConfig } {
+    const persistedConfig = persistedConfigInput || {};
+    const persistedWebdav = persistedWebdavInput || {};
+    const config = { ...defaultConfig, ...persistedConfig };
+    if (!Array.isArray(persistedConfig.channels)) config.channels = [];
+    const channels = normalizeChannels(config);
+    const models = modelOptionsFromChannels(channels);
+    return {
+        webdav: { ...defaultWebdavSyncConfig, ...persistedWebdav },
+        config: {
+            ...config,
+            channelMode: "local" as const,
+            apiFormat: normalizeApiFormat(config.apiFormat),
+            channels,
+            models,
+            imageModel: normalizeModelOptionValue(config.imageModel || config.model, channels),
+            videoModel: normalizeModelOptionValue(config.videoModel, channels),
+            textModel: normalizeModelOptionValue(config.textModel || config.model, channels),
+            audioModel: normalizeModelOptionValue(config.audioModel || defaultConfig.audioModel, channels),
+            audioVoice: config.audioVoice || defaultConfig.audioVoice,
+            audioFormat: config.audioFormat || defaultConfig.audioFormat,
+            audioSpeed: config.audioSpeed || defaultConfig.audioSpeed,
+            audioInstructions: config.audioInstructions || "",
+            reasoningEffort: config.reasoningEffort || "auto",
+            videoSeconds: config.videoSeconds || "6",
+            vquality: config.vquality || "720",
+            videoGenerateAudio: config.videoGenerateAudio || "true",
+            videoWatermark: config.videoWatermark || "false",
+            videoMode: config.videoMode === "reference" ? "reference" : "frames",
+            canvasImageCount: config.canvasImageCount || "3",
+            proxyEnabled: Boolean(config.proxyEnabled),
+            proxyUrl: config.proxyUrl || DEFAULT_LOCAL_PROXY_URL,
+            nodeRegenerateBehavior: config.nodeRegenerateBehavior === "overwrite" ? "overwrite" : "new-node",
+            autoFocusOnSelect: Boolean(config.autoFocusOnSelect),
+        },
+    };
+}
+
 export const useConfigStore = create<ConfigStore>()(
     persist(
         (set, get) => ({
@@ -240,6 +282,7 @@ export const useConfigStore = create<ConfigStore>()(
                         [key]: value,
                     },
                 })),
+            applyGlobalConfig: (config, webdav) => set(normalizeGlobalConfig(config, webdav)),
             isAiConfigReady: (config, model) => isAiConfigReady(config, model),
             openConfigDialog: (shouldPromptContinue = false, configTab = "channels") => set({ isConfigOpen: true, shouldPromptContinue, configTab }),
             setConfigDialogOpen: (isConfigOpen) => set({ isConfigOpen }),
@@ -250,41 +293,9 @@ export const useConfigStore = create<ConfigStore>()(
             partialize: (state) => ({ config: state.config, webdav: state.webdav }),
             merge: (persisted, current) => {
                 const persistedState = (persisted || {}) as Partial<ConfigStore>;
-                const persistedConfig = (persistedState.config || {}) as Partial<AiConfig>;
-                const persistedWebdav = (persistedState.webdav || {}) as Partial<WebdavSyncConfig>;
-                const config = { ...defaultConfig, ...persistedConfig };
-                if (!Array.isArray(persistedConfig.channels)) config.channels = [];
-                const channels = normalizeChannels(config);
-                const models = modelOptionsFromChannels(channels);
                 return {
                     ...current,
-                    webdav: { ...defaultWebdavSyncConfig, ...persistedWebdav },
-                    config: {
-                        ...config,
-                        channelMode: "local",
-                        apiFormat: normalizeApiFormat(config.apiFormat),
-                        channels,
-                        models,
-                        imageModel: normalizeModelOptionValue(config.imageModel || config.model, channels),
-                        videoModel: normalizeModelOptionValue(config.videoModel, channels),
-                        textModel: normalizeModelOptionValue(config.textModel || config.model, channels),
-                        audioModel: normalizeModelOptionValue(config.audioModel || defaultConfig.audioModel, channels),
-                        audioVoice: config.audioVoice || defaultConfig.audioVoice,
-                        audioFormat: config.audioFormat || defaultConfig.audioFormat,
-                        audioSpeed: config.audioSpeed || defaultConfig.audioSpeed,
-                        audioInstructions: config.audioInstructions || "",
-                        reasoningEffort: config.reasoningEffort || "auto",
-                        videoSeconds: config.videoSeconds || "6",
-                        vquality: config.vquality || "720",
-                        videoGenerateAudio: config.videoGenerateAudio || "true",
-                        videoWatermark: config.videoWatermark || "false",
-                        videoMode: config.videoMode === "reference" ? "reference" : "frames",
-                        canvasImageCount: config.canvasImageCount || "3",
-                        proxyEnabled: Boolean(config.proxyEnabled),
-                        proxyUrl: config.proxyUrl || DEFAULT_LOCAL_PROXY_URL,
-                        nodeRegenerateBehavior: config.nodeRegenerateBehavior === "overwrite" ? "overwrite" : "new-node",
-                        autoFocusOnSelect: Boolean(config.autoFocusOnSelect),
-                    },
+                    ...normalizeGlobalConfig(persistedState.config, persistedState.webdav),
                 };
             },
         },
