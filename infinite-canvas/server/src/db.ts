@@ -22,15 +22,17 @@ export const db = mysql.createPool({
 });
 
 export async function migrate() {
-  const schema = await Bun.file(
-    new URL("../sql/001_users.sql", import.meta.url),
-  ).text();
-  const statements = schema
-    .replace(/^\s*--.*$/gm, "")
-    .split(";")
-    .map((statement) => statement.trim())
-    .filter(Boolean);
-  for (const statement of statements) await db.query(statement);
+  for (const migration of ["001_users.sql", "002_storage.sql"]) {
+    const schema = await Bun.file(
+      new URL(`../sql/${migration}`, import.meta.url),
+    ).text();
+    const statements = schema
+      .replace(/^\s*--.*$/gm, "")
+      .split(";")
+      .map((statement) => statement.trim())
+      .filter(Boolean);
+    for (const statement of statements) await db.query(statement);
+  }
 }
 
 export async function bootstrapAdmin() {

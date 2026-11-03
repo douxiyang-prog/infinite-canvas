@@ -8,12 +8,22 @@ import { usePromptSourceScheduler } from "@/hooks/use-prompt-source-scheduler";
 
 export function ClientRootInit({ children }: { children: ReactNode }) {
     const { message } = App.useApp();
-    const { t } = useTranslation();
+    const { i18n, t } = useTranslation();
     const handledConfigParams = useRef(false);
     const importChannelCredentials = useConfigStore((state) => state.importChannelCredentials);
     const openConfigDialog = useConfigStore((state) => state.openConfigDialog);
 
     usePromptSourceScheduler();
+
+    useEffect(() => {
+        const handleStorageError = (event: Event) => {
+            const detail = (event as CustomEvent<unknown>).detail;
+            const description = typeof detail === "string" ? detail : i18n.resolvedLanguage === "en-US" ? "Unknown storage error" : "未知存储错误";
+            message.error(i18n.resolvedLanguage === "en-US" ? `Canvas save failed: ${description}` : `画布保存失败：${description}`);
+        };
+        window.addEventListener("canvas-storage-error", handleStorageError);
+        return () => window.removeEventListener("canvas-storage-error", handleStorageError);
+    }, [i18n.resolvedLanguage, message]);
 
     useEffect(() => {
         if (handledConfigParams.current) return;

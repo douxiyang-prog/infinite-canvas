@@ -135,14 +135,8 @@ function videoPluginResult(result: unknown): VideoGenerationResult {
 }
 
 export async function storeGeneratedVideo(result: VideoGenerationResult): Promise<UploadedFile> {
-    if (result.blob) return uploadMediaFile(result.blob, "video");
-    if (result.url) {
-        try {
-            return await uploadMediaFile(result.url, "video");
-        } catch {
-            return { url: result.url, storageKey: "", bytes: 0, mimeType: result.mimeType || "video/mp4" };
-        }
-    }
+    if (result.blob) return uploadMediaFile(result.blob, "video", { area: "output" });
+    if (result.url) return uploadMediaFile(result.url, "video", { area: "output" });
     throw new Error(apiText("noPlayableVideo"));
 }
 

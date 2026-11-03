@@ -3,7 +3,7 @@ import { persist, type PersistStorage, type StorageValue } from "zustand/middlew
 
 import { nanoid } from "nanoid";
 import i18n from "@/i18n";
-import { localForageStorage } from "@/lib/localforage-storage";
+import { deleteProject as deleteServerProject, fetchProjects, saveProject as saveServerProject } from "@/services/api/projects";
 import type { CanvasBackgroundMode } from "@/lib/canvas-theme";
 import type { CanvasAssistantSession, CanvasConnection, CanvasNodeData, ViewportTransform } from "@/types/canvas";
 
@@ -43,27 +43,60 @@ const initialViewport: ViewportTransform = { x: 0, y: 0, k: 1 };
 const CANVAS_STORE_KEY = "infinite-canvas:canvas_store";
 type PersistedCanvasState = Pick<CanvasStore, "projects" | "deletedProjects">;
 let saveTimer: ReturnType<typeof setTimeout> | null = null;
-let queuedPersistState: PersistedCanvasState | null = null;
+let lastPersistedState: PersistedCanvasState | null = null;
+let persistQueue: Promise<void> = Promise.resolve();
+const projectVersions = new Map<string, number>();
+
+function reportStorageError(error: unknown) {
+    window.dispatchEvent(new CustomEvent("canvas-storage-error", { detail: error instanceof Error ? error.message : String(error) }));
+}
+
+async function persistProjectChanges(previous: PersistedCanvasState, next: PersistedCanvasState) {
+    const previousById = new Map(previous.projects.map((project) => [project.id, project]));
+    const nextIds = new Set(next.projects.map((project) => project.id));
+    for (const project of next.projects) {
+        if (previousById.get(project.id) === project) continue;
+        const result = await saveServerProject(project, projectVersions.get(project.id) || 0);
+        projectVersions.set(project.id, result.version);
+    }
+    for (const project of previous.projects) {
+        if (nextIds.has(project.id)) continue;
+        await deleteServerProject(project.id, projectVersions.get(project.id) || 0);
+        projectVersions.delete(project.id);
+    }
+}
 
 const canvasStorage: PersistStorage<CanvasStore> = {
-    getItem: async (name) => {
-        const value = await localForageStorage.getItem(name);
-        if (!value) return null;
-        const parsed = JSON.parse(value) as StorageValue<CanvasStore>;
-        queuedPersistState = parsed.state as PersistedCanvasState;
-        return parsed;
+    getItem: async () => {
+        try {
+            const data = await fetchProjects();
+            projectVersions.clear();
+            for (const [id, version] of Object.entries(data.versions)) projectVersions.set(id, Number(version));
+            const state = { projects: data.projects, deletedProjects: [] } as PersistedCanvasState;
+            lastPersistedState = state;
+            return { state, version: 0 } as StorageValue<CanvasStore>;
+        } catch (error) {
+            reportStorageError(error);
+            throw error;
+        }
     },
-    setItem: (name, value) => {
+    setItem: (_name, value) => {
         const nextState = value.state as PersistedCanvasState;
-        if (queuedPersistState && queuedPersistState.projects === nextState.projects && queuedPersistState.deletedProjects === nextState.deletedProjects) return;
-        queuedPersistState = nextState;
+        if (lastPersistedState && lastPersistedState.projects === nextState.projects && lastPersistedState.deletedProjects === nextState.deletedProjects) return;
         if (saveTimer) clearTimeout(saveTimer);
         saveTimer = setTimeout(() => {
             saveTimer = null;
-            void localForageStorage.setItem(name, JSON.stringify(value));
+            const snapshot = nextState;
+            persistQueue = persistQueue
+                .then(async () => {
+                    const previous = lastPersistedState || { projects: [], deletedProjects: [] };
+                    await persistProjectChanges(previous, snapshot);
+                    lastPersistedState = snapshot;
+                })
+                .catch((error) => reportStorageError(error));
         }, 400);
     },
-    removeItem: (name) => localForageStorage.removeItem(name),
+    removeItem: async () => undefined,
 };
 
 export const useCanvasStore = create<CanvasStore>()(
@@ -141,6 +174,7 @@ export const useCanvasStore = create<CanvasStore>()(
             onRehydrateStorage: () => () => {
                 useCanvasStore.setState({ hydrated: true });
             },
+            skipHydration: true,
         },
     ),
 );

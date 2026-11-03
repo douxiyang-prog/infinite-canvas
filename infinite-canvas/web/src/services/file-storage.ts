@@ -1,63 +1,81 @@
-import localforage from "localforage";
 import { nanoid } from "nanoid";
 
+import { canvasFileUrl, fetchCanvasFileBlob, uploadCanvasFile, type FileArea } from "@/services/api/files";
 import { withLocalProxy } from "@/stores/use-config-store";
 
 export type UploadedFile = { url: string; storageKey: string; bytes: number; mimeType: string; width?: number; height?: number; durationMs?: number };
 
-const store = localforage.createInstance({ name: "infinite-canvas", storeName: "media_files" });
-const objectUrls = new Map<string, string>();
+type MediaUploadOptions = {
+    area?: FileArea;
+    projectId?: string;
+};
 
-export async function uploadMediaFile(input: string | Blob, prefix = "file"): Promise<UploadedFile> {
+function mediaKind(prefix: string, blob: Blob) {
+    if (prefix.includes("video") || blob.type.startsWith("video/")) return "video";
+    if (prefix.includes("audio") || blob.type.startsWith("audio/")) return "audio";
+    if (blob.type.startsWith("image/")) return "image";
+    return "file";
+}
+
+export async function uploadMediaFile(input: string | Blob, prefix = "file", options: MediaUploadOptions = {}): Promise<UploadedFile> {
     const blob = typeof input === "string" ? await (await fetch(withLocalProxy(input))).blob() : input;
     const storageKey = `${prefix}:${nanoid()}`;
-    await store.setItem(storageKey, blob);
     const url = URL.createObjectURL(blob);
-    objectUrls.set(storageKey, url);
-    const meta = blob.type.startsWith("video/") ? await readVideoMeta(url) : blob.type.startsWith("audio/") ? await readAudioMeta(url) : {};
-    return { url, storageKey, bytes: blob.size, mimeType: blob.type || "application/octet-stream", ...meta };
+    const meta: { width?: number; height?: number; durationMs?: number } =
+        blob.type.startsWith("video/") ? await readVideoMeta(url) : blob.type.startsWith("audio/") ? await readAudioMeta(url) : {};
+    const uploaded = await uploadCanvasFile(blob, {
+        area: options.area || "input",
+        projectId: options.projectId,
+        storageKey,
+        kind: mediaKind(prefix, blob),
+        width: meta.width,
+        height: meta.height,
+        durationMs: meta.durationMs,
+    });
+    URL.revokeObjectURL(url);
+    return {
+        url: canvasFileUrl(storageKey),
+        storageKey,
+        bytes: uploaded.bytes,
+        mimeType: uploaded.mimeType,
+        width: uploaded.width ?? meta.width,
+        height: uploaded.height ?? meta.height,
+        durationMs: uploaded.durationMs ?? meta.durationMs,
+    };
 }
 
 export async function resolveMediaUrl(storageKey?: string, fallback = "") {
     if (!storageKey) return fallback;
-    const cached = objectUrls.get(storageKey);
-    if (cached) return cached;
-    const blob = await store.getItem<Blob>(storageKey);
-    if (!blob) return fallback;
-    const url = URL.createObjectURL(blob);
-    objectUrls.set(storageKey, url);
-    return url;
+    try {
+        return canvasFileUrl(storageKey);
+    } catch {
+        return fallback;
+    }
 }
 
 export async function getMediaBlob(storageKey: string) {
-    return store.getItem<Blob>(storageKey);
+    try {
+        return await fetchCanvasFileBlob(storageKey);
+    } catch {
+        return null;
+    }
 }
 
 export async function setMediaBlob(storageKey: string, blob: Blob) {
-    await store.setItem(storageKey, blob);
-    const url = URL.createObjectURL(blob);
-    objectUrls.set(storageKey, url);
-    return url;
+    await uploadCanvasFile(blob, {
+        area: "input",
+        storageKey,
+        kind: mediaKind(storageKey.split(":")[0] || "file", blob),
+    });
+    return canvasFileUrl(storageKey);
 }
 
 export async function deleteStoredMedia(keys: Iterable<string>) {
-    await Promise.all(
-        Array.from(new Set(keys)).map(async (key) => {
-            const url = objectUrls.get(key);
-            if (url) URL.revokeObjectURL(url);
-            objectUrls.delete(key);
-            await store.removeItem(key);
-        }),
-    );
+    void keys;
 }
 
-export async function cleanupUnusedMedia(usedData: unknown) {
-    const usedKeys = collectMediaStorageKeys(usedData);
-    const unused: string[] = [];
-    await store.iterate((_value, key) => {
-        if (!usedKeys.has(key)) unused.push(key);
-    });
-    await Promise.all(unused.map((key) => store.removeItem(key)));
+export async function cleanupUnusedMedia(_usedData: unknown) {
+    // Server-side garbage collection owns physical file deletion.
 }
 
 export function collectMediaStorageKeys(value: unknown, keys = new Set<string>()) {

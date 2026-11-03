@@ -20,6 +20,16 @@ function booleanValue(name: string, fallback: boolean) {
   throw new Error(`${name} 必须是 true 或 false`);
 }
 
+function storageAllowedRoots() {
+  const values = (process.env.CANVAS_STORAGE_ALLOWED_ROOTS || "/mnt/smb,/srv,/data")
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean);
+  if (!values.length)
+    throw new Error("CANVAS_STORAGE_ALLOWED_ROOTS 至少需要包含一个目录");
+  return values;
+}
+
 export const config = {
   port: positiveNumber("PORT", 8080),
   mysqlHost: required("MYSQL_HOST"),
@@ -33,4 +43,5 @@ export const config = {
   bootstrapPassword: process.env.BOOTSTRAP_ADMIN_PASSWORD || "",
   bootstrapDisplayName:
     process.env.BOOTSTRAP_ADMIN_DISPLAY_NAME?.trim() || "管理员",
+  storageAllowedRoots: storageAllowedRoots(),
 };

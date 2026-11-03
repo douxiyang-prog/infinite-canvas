@@ -1530,7 +1530,7 @@ async function attachmentNodeOps(endpoint: string, token: string, clientId: stri
                 const body = (await res.json().catch(() => null)) as { error?: string } | null;
                 throw new Error(body?.error || rt("attachmentReadFailed"));
             }
-            const image = await uploadImage(await res.blob());
+            const image = await uploadImage(await res.blob(), { area: "output" });
             const size = fitNodeSize(image.width, image.height);
             const position = item.position && typeof item.position === "object" ? (item.position as { x?: unknown; y?: unknown }) : {};
             return {
@@ -1571,7 +1571,7 @@ async function importGeneratedImages(endpoint: string, token: string, item: Agen
                 : await fetch(`${endpoint}/agent/local-image?token=${encodeURIComponent(token)}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ path: source }) });
             if (!response.ok) throw new Error(rt("generatedImageReadFailed"));
             const blob = await response.blob();
-            const upload = await uploadImage(blob);
+            const upload = await uploadImage(blob, { area: "output" });
             const dataUrl = await readDataUrl(blob);
             const name = source.startsWith("/") ? source.split("/").at(-1) || rt("generatedImageName", { index: index + 1 }) : rt("generatedImageName", { index: index + 1 });
             return { upload, name, attachment: { id: createId(), name, type: blob.type || upload.mimeType, size: blob.size, width: upload.width, height: upload.height, url: upload.url, dataUrl } };

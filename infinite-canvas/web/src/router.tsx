@@ -1,6 +1,7 @@
 import { createBrowserRouter, Outlet } from "react-router-dom";
 
 import { RequireAuth } from "@/components/auth/require-auth";
+import { RequireSetup } from "@/components/auth/require-setup";
 import { AnalyticsTracker } from "@/components/layout/analytics-tracker";
 import UserLayout from "@/layouts/user-layout";
 import AdminSettingsPage from "@/pages/admin/settings";
@@ -14,6 +15,7 @@ import ImagePage from "@/pages/image";
 import LoginPage from "@/pages/login";
 import NotFound from "@/pages/not-found";
 import PromptsPage from "@/pages/prompts";
+import SetupPage from "@/pages/setup";
 import VideoPage from "@/pages/video";
 
 export const router = createBrowserRouter([
@@ -23,10 +25,12 @@ export const router = createBrowserRouter([
         children: [
             {
                 element: (
-                    <UserLayout>
-                        <AnalyticsTracker />
-                        <Outlet />
-                    </UserLayout>
+                    <RequireSetup>
+                        <UserLayout>
+                            <AnalyticsTracker />
+                            <Outlet />
+                        </UserLayout>
+                    </RequireSetup>
                 ),
                 children: [
                     { path: "/", element: <HomePage /> },
@@ -41,6 +45,7 @@ export const router = createBrowserRouter([
                     { path: "/admin/users", element: <AdminUsersPage /> },
                 ],
             },
+            { path: "/setup", element: <SetupPage /> },
         ],
     },
     { path: "*", element: <NotFound /> },

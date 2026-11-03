@@ -1,9 +1,9 @@
-import localforage from "localforage";
-
 import { nanoid } from "nanoid";
+
 import i18n from "@/i18n";
-import { withLocalProxy } from "@/stores/use-config-store";
 import { createImageThumbnail } from "@/lib/image-thumbnail";
+import { canvasFileUrl, fetchCanvasFileBlob, uploadCanvasFile, type FileArea } from "@/services/api/files";
+import { withLocalProxy } from "@/stores/use-config-store";
 
 export type UploadedImage = {
     url: string;
@@ -14,57 +14,56 @@ export type UploadedImage = {
     mimeType: string;
 };
 
-const store = localforage.createInstance({ name: "infinite-canvas", storeName: "image_files" });
-const previewStore = localforage.createInstance({ name: "infinite-canvas", storeName: "image_previews" });
-const imageLogStore = localforage.createInstance({ name: "infinite-canvas", storeName: "image_generation_logs" });
-const videoLogStore = localforage.createInstance({ name: "infinite-canvas", storeName: "video_generation_logs" });
-const objectUrls = new Map<string, string>();
+type ImageReadOptions = {
+    signal?: AbortSignal;
+    area?: FileArea;
+    projectId?: string;
+};
+
 const previewUrls = new Map<string, string>();
 const previewListeners = new Set<() => void>();
 let previewRevision = 0;
 let previewQueue: Promise<unknown> = Promise.resolve();
-const IMAGE_PREVIEW_VERSION = 1;
 const IMAGE_DOWNLOAD_TIMEOUT_MS = 10 * 60_000;
-const IMAGE_REMOTE_LOAD_TIMEOUT_MS = 10 * 60_000;
 const IMAGE_DECODE_TIMEOUT_MS = 10_000;
 const IMAGE_RESPONSE_ERROR = "ImageResponseError";
 const IMAGE_TIMEOUT_ERROR = "ImageTimeoutError";
 
-type StoredImagePreview = { version: number; blob?: Blob };
-
-type ImageReadOptions = { signal?: AbortSignal };
-
 export async function uploadImage(input: string | Blob, options?: ImageReadOptions): Promise<UploadedImage> {
     if (typeof input !== "string") return storeImage(input, options);
-
-    let blob: Blob;
-    try {
-        blob = await fetchImageBlob(input, options);
-    } catch (error) {
-        if (options?.signal?.aborted || isNamedError(error, IMAGE_RESPONSE_ERROR) || isNamedError(error, IMAGE_TIMEOUT_ERROR) || !/^https?:\/\//i.test(input)) throw error;
-        const meta = await loadImageMeta(input, options, IMAGE_REMOTE_LOAD_TIMEOUT_MS);
-        if (!meta) throw error;
-        return { url: input, width: meta.width, height: meta.height, bytes: 0, mimeType: "" };
-    }
+    const blob = await fetchImageBlob(input, options);
     return storeImage(blob, options);
 }
 
 async function storeImage(blob: Blob, options?: ImageReadOptions): Promise<UploadedImage> {
     const storageKey = `image:${nanoid()}`;
-    const url = URL.createObjectURL(blob);
+    const localUrl = URL.createObjectURL(blob);
     try {
-        const meta = await loadImageMeta(url, options);
+        const meta = await loadImageMeta(localUrl, options);
         if (!meta) throw new Error(i18n.t("common.imageReadFailed"));
         throwIfAborted(options?.signal);
-        await store.setItem(storageKey, blob);
+        const uploaded = await uploadCanvasFile(blob, {
+            area: options?.area || "input",
+            projectId: options?.projectId,
+            kind: "image",
+            storageKey,
+            width: meta.width,
+            height: meta.height,
+        });
         throwIfAborted(options?.signal);
-        objectUrls.set(storageKey, url);
         await storeImagePreview(storageKey, blob);
-        return { url, storageKey, width: meta.width, height: meta.height, bytes: blob.size, mimeType: blob.type.startsWith("image/") ? blob.type : "" };
+        return {
+            url: canvasFileUrl(storageKey),
+            storageKey,
+            width: meta.width,
+            height: meta.height,
+            bytes: uploaded.bytes,
+            mimeType: uploaded.mimeType,
+        };
     } catch (error) {
-        URL.revokeObjectURL(url);
-        await store.removeItem(storageKey).catch(() => undefined);
         throw error;
+    } finally {
+        URL.revokeObjectURL(localUrl);
     }
 }
 
@@ -142,25 +141,25 @@ function throwIfAborted(signal?: AbortSignal) {
 
 export async function resolveImageUrl(storageKey?: string, fallback = "") {
     if (!storageKey) return fallback;
-    const cached = objectUrls.get(storageKey);
-    if (cached) return cached;
-    const blob = await store.getItem<Blob>(storageKey);
-    if (!blob) return fallback;
-    const url = URL.createObjectURL(blob);
-    objectUrls.set(storageKey, url);
-    return url;
+    try {
+        return canvasFileUrl(storageKey);
+    } catch {
+        return fallback;
+    }
 }
 
 export async function getImageBlob(storageKey: string) {
-    return store.getItem<Blob>(storageKey);
+    try {
+        return await fetchCanvasFileBlob(storageKey);
+    } catch {
+        return null;
+    }
 }
 
-// 缩略图按图片的 storageKey 另存一份 WebP，只放在本地 IndexedDB 里，不写进节点数据，也不参与导出和 WebDAV 同步。
 export function previewUrlFor(storageKey?: string) {
     return storageKey ? previewUrls.get(storageKey) : undefined;
 }
 
-// 缩略图在后台补，生成完成后再让用到它的界面重渲染一次。
 export function subscribeImagePreviews(listener: () => void) {
     previewListeners.add(listener);
     return () => {
@@ -176,16 +175,14 @@ export async function ensureImagePreview(storageKey?: string) {
     if (!storageKey) return undefined;
     const cached = previewUrls.get(storageKey);
     if (cached) return cached;
-    const stored = await previewStore.getItem<StoredImagePreview>(storageKey).catch(() => null);
-    if (stored?.version === IMAGE_PREVIEW_VERSION) return stored.blob ? cacheImagePreview(storageKey, stored.blob) : undefined;
     queueImagePreview(storageKey);
     return undefined;
 }
 
-// 缩略图生成排成一队，避免一次打开大量图片时同时解码。
 function queueImagePreview(storageKey: string) {
     previewQueue = previewQueue
         .then(async () => {
+            if (previewUrls.has(storageKey)) return;
             const original = await getImageBlob(storageKey);
             if (original) await storeImagePreview(storageKey, original);
         })
@@ -194,11 +191,12 @@ function queueImagePreview(storageKey: string) {
 
 async function storeImagePreview(storageKey: string, original: Blob) {
     const preview = await createImageThumbnail(original).catch(() => undefined);
-    await previewStore.setItem<StoredImagePreview>(storageKey, { version: IMAGE_PREVIEW_VERSION, blob: preview }).catch(() => undefined);
     return preview ? cacheImagePreview(storageKey, preview) : undefined;
 }
 
 function cacheImagePreview(storageKey: string, preview: Blob) {
+    const existing = previewUrls.get(storageKey);
+    if (existing) URL.revokeObjectURL(existing);
     const url = URL.createObjectURL(preview);
     previewUrls.set(storageKey, url);
     previewRevision += 1;
@@ -206,59 +204,40 @@ function cacheImagePreview(storageKey: string, preview: Blob) {
     return url;
 }
 
-async function deleteImagePreview(storageKey: string) {
+function deleteImagePreview(storageKey: string) {
     const url = previewUrls.get(storageKey);
     if (url) URL.revokeObjectURL(url);
     previewUrls.delete(storageKey);
-    await previewStore.removeItem(storageKey).catch(() => undefined);
 }
 
 export async function setImageBlob(storageKey: string, blob: Blob) {
-    await store.setItem(storageKey, blob);
-    await deleteImagePreview(storageKey);
+    await uploadCanvasFile(blob, {
+        area: "input",
+        kind: "image",
+        storageKey,
+    });
+    deleteImagePreview(storageKey);
     await storeImagePreview(storageKey, blob);
-    const url = URL.createObjectURL(blob);
-    objectUrls.set(storageKey, url);
-    return url;
+    return canvasFileUrl(storageKey);
 }
 
 export async function imageToDataUrl(image: { url?: string; dataUrl?: string; storageKey?: string }, options?: ImageReadOptions) {
-    const url = image.dataUrl || (await resolveImageUrl(image.storageKey, image.url || ""));
+    if (image.dataUrl) return image.dataUrl;
+    const blob = image.storageKey ? await getImageBlob(image.storageKey) : null;
+    if (blob) return blobToDataUrl(blob);
+    const url = image.url || "";
     if (!url || url.startsWith("data:")) return url;
     return blobToDataUrl(await fetchImageBlob(url, options));
 }
 
 export async function deleteStoredImages(keys: Iterable<string>) {
-    await Promise.all(
-        Array.from(new Set(keys)).map(async (key) => {
-            const url = objectUrls.get(key);
-            if (url) URL.revokeObjectURL(url);
-            objectUrls.delete(key);
-            await deleteImagePreview(key);
-            await store.removeItem(key);
-        }),
-    );
+    for (const key of new Set(keys)) {
+        deleteImagePreview(key);
+    }
 }
 
-export async function cleanupUnusedImages(usedData: unknown) {
-    const usedKeys = collectImageStorageKeys(usedData);
-    await Promise.all([
-        imageLogStore.iterate((value) => {
-            collectImageStorageKeys(value, usedKeys);
-        }),
-        videoLogStore.iterate((value) => {
-            collectImageStorageKeys(value, usedKeys);
-        }),
-    ]);
-    const unused: string[] = [];
-    await store.iterate((_value, key) => {
-        if (!usedKeys.has(key)) unused.push(key);
-    });
-    const orphanPreviews: string[] = [];
-    await previewStore.iterate((_value, key) => {
-        if (!usedKeys.has(key)) orphanPreviews.push(key);
-    });
-    await Promise.all([deleteStoredImages(unused), ...orphanPreviews.map(deleteImagePreview)]);
+export async function cleanupUnusedImages(_usedData: unknown) {
+    // Server-side garbage collection owns physical file deletion.
 }
 
 export function collectImageStorageKeys(value: unknown, keys = new Set<string>()) {

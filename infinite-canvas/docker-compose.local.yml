@@ -18,3 +18,7 @@ services:
     restart: unless-stopped
     env_file:
       - .env
+    environment:
+      CANVAS_STORAGE_ALLOWED_ROOTS: ${CANVAS_STORAGE_ALLOWED_ROOTS:-/mnt/smb}
+    volumes:
+      - ${CANVAS_STORAGE_HOST_ROOT:-/mnt/smb}:${CANVAS_STORAGE_CONTAINER_ROOT:-/mnt/smb}:rw

@@ -35,6 +35,20 @@ import {
   type UserStatus,
   updateUser,
 } from "./users";
+import {
+  getStorageSettings,
+  initializeStorage,
+  setupStatus,
+  validateStoragePath,
+} from "./storage";
+import {
+  deleteProject,
+  listProjects,
+  loadProject,
+  saveProject,
+} from "./projects";
+import { getFile, saveFile } from "./files";
+import { purgeExpiredTrash, restoreProject } from "./trash";
 
 function roleValue(value: unknown, fallback?: UserRole): UserRole | undefined {
   if (value === undefined) return fallback;
@@ -51,10 +65,125 @@ function statusValue(
   throw new HttpError(400, "用户状态不正确");
 }
 
+function optionalNumberField(
+  body: Record<string, unknown>,
+  key: string,
+  fallback: number,
+) {
+  const value = body[key];
+  if (value === undefined) return fallback;
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed))
+    throw new HttpError(400, `${key} 必须是数字`);
+  return parsed;
+}
+
 async function handleApi(request: Request, url: URL) {
   if (request.method === "GET" && url.pathname === "/api/health") {
     await db.query("SELECT 1");
     return json({ ok: true });
+  }
+
+  if (request.method === "GET" && url.pathname === "/api/setup/status") {
+    return json(await setupStatus());
+  }
+
+  if (request.method === "GET" && url.pathname === "/api/admin/storage") {
+    await requireAdmin(request);
+    const settings = await getStorageSettings();
+    const validation = settings
+      ? await validateStoragePath(settings.root)
+      : null;
+    return json({
+      settings,
+      validation,
+      allowedRoots: config.storageAllowedRoots,
+    });
+  }
+
+  if (
+    request.method === "POST" &&
+    url.pathname === "/api/admin/storage/validate"
+  ) {
+    await requireAdmin(request);
+    const body = await readJson(request);
+    const path = textField(body, "path", "存储路径");
+    return json(await validateStoragePath(path));
+  }
+
+  if (
+    request.method === "POST" &&
+    url.pathname === "/api/admin/storage/initialize"
+  ) {
+    const user = await requireAdmin(request);
+    const body = await readJson(request);
+    const path = textField(body, "path", "存储路径");
+    const settings = await initializeStorage(
+      path,
+      {
+        maxUploadMb: optionalNumberField(body, "maxUploadMb", 500),
+        autosaveMs: optionalNumberField(body, "autosaveMs", 1500),
+        trashRetentionDays: optionalNumberField(
+          body,
+          "trashRetentionDays",
+          14,
+        ),
+      },
+      user.id,
+    );
+    return json({ settings });
+  }
+
+  if (request.method === "GET" && url.pathname === "/api/projects") {
+    const user = await requireUser(request);
+    return json(await listProjects(user.id));
+  }
+
+  const projectMatch = url.pathname.match(/^\/api\/projects\/([A-Za-z0-9_-]+)$/);
+  if (projectMatch) {
+    const user = await requireUser(request);
+    const projectId = projectMatch[1];
+    if (request.method === "GET") {
+      return json(await loadProject(user.id, projectId));
+    }
+    if (request.method === "PUT") {
+      const body = await readJson(request);
+      const expectedVersion = optionalNumberField(body, "expectedVersion", -1);
+      if (!Number.isInteger(expectedVersion) || expectedVersion < 0)
+        throw new HttpError(400, "expectedVersion 无效");
+      return json(
+        await saveProject(user.id, projectId, body.project, expectedVersion),
+      );
+    }
+    if (request.method === "DELETE") {
+      const expectedVersion = Number(url.searchParams.get("expectedVersion"));
+      if (!Number.isInteger(expectedVersion) || expectedVersion < 0)
+        throw new HttpError(400, "expectedVersion 无效");
+      return json(await deleteProject(user.id, projectId, expectedVersion));
+    }
+  }
+
+  const restoreMatch = url.pathname.match(/^\/api\/projects\/([A-Za-z0-9_-]+)\/restore$/);
+  if (restoreMatch && request.method === "POST") {
+    const user = await requireUser(request);
+    return json(await restoreProject(user.id, restoreMatch[1]));
+  }
+
+  if (request.method === "POST" && url.pathname === "/api/files") {
+    const user = await requireUser(request);
+    const contentType = request.headers.get("content-type") || "";
+    if (!contentType.toLowerCase().includes("multipart/form-data"))
+      throw new HttpError(415, "文件上传必须使用 multipart/form-data");
+    return json(await saveFile(user.id, await request.formData()), 201);
+  }
+
+  const fileMatch = url.pathname.match(/^\/api\/files\/([^/]+)$/);
+  if (
+    fileMatch &&
+    (request.method === "GET" || request.method === "HEAD")
+  ) {
+    const user = await requireUser(request);
+    return getFile(user.id, decodeURIComponent(fileMatch[1]), request);
   }
 
   if (request.method === "GET" && url.pathname === "/api/branding") {
@@ -215,7 +344,13 @@ const server = Bun.serve({
 });
 console.log(`Canvas API listening on http://0.0.0.0:${server.port}`);
 
+void purgeExpiredTrash().catch((error) => console.error("Trash cleanup failed", error));
+const trashTimer = setInterval(() => {
+  void purgeExpiredTrash().catch((error) => console.error("Trash cleanup failed", error));
+}, 60 * 60 * 1000);
+
 process.on("SIGTERM", async () => {
+  clearInterval(trashTimer);
   server.stop();
   await db.end();
 });
