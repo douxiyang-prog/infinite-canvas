@@ -334,6 +334,7 @@ export default {
         prompts: "提示词库",
         assets: "我的资产",
         config: "配置",
+        globalSettings: "全局设置",
     },
     topNav: {
         openMenu: "打开导航菜单",

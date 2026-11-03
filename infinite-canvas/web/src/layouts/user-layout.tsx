@@ -4,14 +4,14 @@ import { useEffect, useRef } from "react";
 import { AgentPanel } from "@/components/agent/agent-panel";
 import { AppSidebar } from "@/components/layout/app-sidebar";
 import { AppTopNav } from "@/components/layout/app-top-nav";
-import { useCanvasStore } from "@/stores/canvas/use-canvas-store";
+import { prepareCanvasStoreForSession, useCanvasStore } from "@/stores/canvas/use-canvas-store";
 
 export default function UserLayout({ children }: { children: ReactNode }) {
     const bootstrapped = useRef(false);
     useEffect(() => {
         if (bootstrapped.current) return;
         bootstrapped.current = true;
-        useCanvasStore.setState({ hydrated: false, projects: [], deletedProjects: [] });
+        prepareCanvasStoreForSession();
         void useCanvasStore.persist.rehydrate();
     }, []);
 

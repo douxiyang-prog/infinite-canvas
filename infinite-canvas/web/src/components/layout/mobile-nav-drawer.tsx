@@ -1,9 +1,10 @@
 import { Drawer } from "antd";
-import { Link } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 
 import { navigationTools, type NavigationToolSlug } from "@/constant/navigation-tools";
 import { cn } from "@/lib/utils";
+import { useUserStore } from "@/stores/use-user-store";
 
 type MobileNavDrawerProps = {
     open: boolean;
@@ -13,17 +14,22 @@ type MobileNavDrawerProps = {
 
 export function MobileNavDrawer({ open, activeToolSlug, onClose }: MobileNavDrawerProps) {
     const { t } = useTranslation();
+    const { pathname } = useLocation();
+    const user = useUserStore((state) => state.user);
+    const isAdmin = user?.role === "admin";
+    const visibleTools = navigationTools.filter((tool) => !("adminOnly" in tool && tool.adminOnly) || isAdmin);
 
     return (
         <Drawer title={t("topNav.navigation")} placement="left" size={280} open={open} onClose={onClose} className="md:hidden">
             <div className="space-y-1">
-                {navigationTools.map((tool) => {
+                {visibleTools.map((tool) => {
                     const Icon = tool.icon;
-                    const active = tool.slug === activeToolSlug;
+                    const active = tool.slug === "config" ? pathname.startsWith("/admin/settings") : tool.slug === activeToolSlug;
+                    const label = t(tool.slug === "config" ? "navigation.globalSettings" : `navigation.${tool.slug}`);
                     return (
                         <Link
                             key={tool.slug}
-                            to={`/${tool.slug}`}
+                            to={tool.slug === "config" ? "/admin/settings" : `/${tool.slug}`}
                             onClick={onClose}
                             className={cn(
                                 "flex items-center gap-3 rounded-lg px-3 py-3 text-base transition",
@@ -31,7 +37,7 @@ export function MobileNavDrawer({ open, activeToolSlug, onClose }: MobileNavDraw
                             )}
                         >
                             <Icon className="size-5" />
-                            <span>{t(`navigation.${tool.slug}`)}</span>
+                            <span>{label}</span>
                         </Link>
                     );
                 })}

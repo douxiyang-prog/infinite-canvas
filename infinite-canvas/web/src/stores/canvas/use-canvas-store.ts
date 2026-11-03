@@ -45,6 +45,7 @@ type PersistedCanvasState = Pick<CanvasStore, "projects" | "deletedProjects">;
 let saveTimer: ReturnType<typeof setTimeout> | null = null;
 let lastPersistedState: PersistedCanvasState | null = null;
 let persistQueue: Promise<void> = Promise.resolve();
+let persistenceEnabled = false;
 const projectVersions = new Map<string, number>();
 
 function reportStorageError(error: unknown) {
@@ -81,6 +82,7 @@ const canvasStorage: PersistStorage<CanvasStore> = {
         }
     },
     setItem: (_name, value) => {
+        if (!persistenceEnabled) return;
         const nextState = value.state as PersistedCanvasState;
         if (lastPersistedState && lastPersistedState.projects === nextState.projects && lastPersistedState.deletedProjects === nextState.deletedProjects) return;
         if (saveTimer) clearTimeout(saveTimer);
@@ -98,6 +100,17 @@ const canvasStorage: PersistStorage<CanvasStore> = {
     },
     removeItem: async () => undefined,
 };
+
+export function prepareCanvasStoreForSession() {
+    persistenceEnabled = false;
+    if (saveTimer) {
+        clearTimeout(saveTimer);
+        saveTimer = null;
+    }
+    lastPersistedState = null;
+    projectVersions.clear();
+    useCanvasStore.setState({ hydrated: false, projects: [], deletedProjects: [] });
+}
 
 export const useCanvasStore = create<CanvasStore>()(
     persist(
@@ -171,7 +184,8 @@ export const useCanvasStore = create<CanvasStore>()(
                     projects: state.projects,
                     deletedProjects: state.deletedProjects,
                 }) as StorageValue<CanvasStore>["state"],
-            onRehydrateStorage: () => () => {
+            onRehydrateStorage: () => (_state, error) => {
+                persistenceEnabled = !error;
                 useCanvasStore.setState({ hydrated: true });
             },
             skipHydration: true,

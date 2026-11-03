@@ -378,9 +378,11 @@ export function AppConfigPanel({ showDoneButton = false, initialTab = "channels"
 
 export function AppConfigModal() {
     const { t } = useTranslation();
+    const user = useUserStore((state) => state.user);
     const isConfigOpen = useConfigStore((state) => state.isConfigOpen);
     const configTab = useConfigStore((state) => state.configTab);
     const setConfigDialogOpen = useConfigStore((state) => state.setConfigDialogOpen);
+    if (user?.role !== "admin") return null;
     return (
         <Modal
             title={

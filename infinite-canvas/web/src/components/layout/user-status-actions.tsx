@@ -9,7 +9,6 @@ import { AnimatedThemeToggler } from "@/components/ui/animated-theme-toggler";
 import { VersionReleaseModal } from "@/components/layout/version-release-modal";
 import { changeAppLocale, type AppLocale } from "@/i18n";
 import { canvasThemes } from "@/lib/canvas-theme";
-import { useConfigStore } from "@/stores/use-config-store";
 import { useThemeStore } from "@/stores/use-theme-store";
 import { useUserStore } from "@/stores/use-user-store";
 
@@ -24,7 +23,6 @@ export function UserStatusActions({ showConfig = true, variant = "default", onOp
     const { i18n, t } = useTranslation();
     const theme = useThemeStore((state) => state.theme);
     const setTheme = useThemeStore((state) => state.setTheme);
-    const openConfigDialog = useConfigStore((state) => state.openConfigDialog);
     const user = useUserStore((state) => state.user);
     const logout = useUserStore((state) => state.logout);
     const navigate = useNavigate();
@@ -86,8 +84,8 @@ export function UserStatusActions({ showConfig = true, variant = "default", onOp
                     <Puzzle className="size-4" />
                 </button>
             ) : null}
-            {showConfig ? (
-                <button type="button" className={naturalIconClass} style={iconStyle} onClick={() => openConfigDialog(false)} aria-label={t("navigation.config")} title={t("navigation.config")}>
+            {showConfig && user?.role === "admin" ? (
+                <button type="button" className={naturalIconClass} style={iconStyle} onClick={() => navigate("/admin/settings")} aria-label={t("navigation.globalSettings")} title={t("navigation.globalSettings")}>
                     <Settings2 className="size-4" />
                 </button>
             ) : null}

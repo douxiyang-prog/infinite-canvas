@@ -24,6 +24,7 @@ export const navigationTools = [
     {
         slug: "config",
         icon: Settings2,
+        adminOnly: true,
     },
 ] as const;
 

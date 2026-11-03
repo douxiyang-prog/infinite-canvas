@@ -8,16 +8,18 @@ import { BrandLogo } from "@/components/layout/brand-logo";
 import { navigationTools, type NavigationToolSlug } from "@/constant/navigation-tools";
 import { cn } from "@/lib/utils";
 import { useBrandingStore } from "@/stores/use-branding-store";
+import { useUserStore } from "@/stores/use-user-store";
 
 const SIDEBAR_STORAGE_KEY = "infinite-canvas:sidebar-collapsed";
 
 function SidebarLink({ tool, active, collapsed }: { tool: (typeof navigationTools)[number]; active: boolean; collapsed: boolean }) {
     const { t } = useTranslation();
     const Icon = tool.icon;
-    const label = t(`navigation.${tool.slug}`);
+    const label = t(tool.slug === "config" ? "navigation.globalSettings" : `navigation.${tool.slug}`);
+    const href = tool.slug === "config" ? "/admin/settings" : `/${tool.slug}`;
     const link = (
         <Link
-            to={`/${tool.slug}`}
+            to={href}
             aria-current={active ? "page" : undefined}
             title={collapsed ? label : undefined}
             className={cn(
@@ -46,6 +48,9 @@ export function AppSidebar() {
     const { t } = useTranslation();
     const { pathname } = useLocation();
     const companyName = useBrandingStore((state) => state.companyName);
+    const user = useUserStore((state) => state.user);
+    const isAdmin = user?.role === "admin";
+    const visibleTools = navigationTools.filter((tool) => !("adminOnly" in tool && tool.adminOnly) || isAdmin);
     const slug = pathname.split("/").filter(Boolean)[0];
     const activeToolSlug = navigationTools.some((tool) => tool.slug === slug) ? (slug as NavigationToolSlug) : undefined;
     const canvasProject = /^\/canvas\/[^/]+/.test(pathname);
@@ -88,8 +93,13 @@ export function AppSidebar() {
 
             <nav className="hide-scrollbar min-h-0 flex-1 overflow-y-auto p-2" aria-label={t("topNav.navigation")}>
                 <div className="space-y-1">
-                    {navigationTools.map((tool) => (
-                        <SidebarLink key={tool.slug} tool={tool} active={tool.slug === activeToolSlug} collapsed={isCollapsed} />
+                    {visibleTools.map((tool) => (
+                        <SidebarLink
+                            key={tool.slug}
+                            tool={tool}
+                            active={tool.slug === "config" ? pathname.startsWith("/admin/settings") : tool.slug === activeToolSlug}
+                            collapsed={isCollapsed}
+                        />
                     ))}
                 </div>
             </nav>

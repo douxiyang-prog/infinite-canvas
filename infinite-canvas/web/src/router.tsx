@@ -1,4 +1,4 @@
-import { createBrowserRouter, Outlet } from "react-router-dom";
+import { createBrowserRouter, Navigate, Outlet } from "react-router-dom";
 
 import { RequireAuth } from "@/components/auth/require-auth";
 import { RequireSetup } from "@/components/auth/require-setup";
@@ -9,7 +9,6 @@ import AdminUsersPage from "@/pages/admin/users";
 import AssetsPage from "@/pages/assets";
 import CanvasPage from "@/pages/canvas";
 import CanvasProjectPage from "@/pages/canvas/project";
-import ConfigPage from "@/pages/config";
 import HomePage from "@/pages/home";
 import ImagePage from "@/pages/image";
 import LoginPage from "@/pages/login";
@@ -40,7 +39,7 @@ export const router = createBrowserRouter([
                     { path: "/prompts", element: <PromptsPage /> },
                     { path: "/canvas", element: <CanvasPage /> },
                     { path: "/canvas/:id", element: <CanvasProjectPage /> },
-                    { path: "/config", element: <ConfigPage /> },
+                    { path: "/config", element: <Navigate to="/admin/settings" replace /> },
                     { path: "/admin/settings", element: <AdminSettingsPage /> },
                     { path: "/admin/users", element: <AdminUsersPage /> },
                 ],

@@ -5,6 +5,7 @@ import type { UploadProps } from "antd";
 import { Navigate } from "react-router-dom";
 
 import { BrandLogo } from "@/components/layout/brand-logo";
+import { AppConfigPanel } from "@/components/layout/app-config-modal";
 import { BRANDING_LOGO_TYPES, MAX_BRANDING_LOGO_BYTES, updateBrandingCompanyName, uploadBrandingLogo } from "@/services/api/branding";
 import { useBrandingStore } from "@/stores/use-branding-store";
 import { useUserStore } from "@/stores/use-user-store";
@@ -66,12 +67,21 @@ function AdminSettings() {
 
     return (
         <main className="h-full overflow-y-auto bg-background">
-            <div className="mx-auto max-w-4xl px-6 py-7">
+            <div className="mx-auto max-w-6xl px-6 py-7">
                 <div className="mb-6">
-                    <h1 className="text-xl font-semibold text-stone-950 dark:text-stone-100">全局管理</h1>
-                    <p className="mt-1 text-sm text-stone-500">管理所有用户都能看到的公司名称和品牌 Logo。</p>
+                    <h1 className="text-xl font-semibold text-stone-950 dark:text-stone-100">全局设置</h1>
+                    <p className="mt-1 text-sm text-stone-500">统一管理应用配置、服务端存储和品牌信息。</p>
                 </div>
 
+                <section className="mb-8">
+                    <h2 className="text-base font-medium">应用配置</h2>
+                    <p className="mt-1 text-sm text-stone-500">管理模型渠道、生成默认值、提示词来源、同步和服务端存储。</p>
+                    <div className="mt-5">
+                        <AppConfigPanel initialTab="channels" />
+                    </div>
+                </section>
+
+                <h2 className="mb-4 text-base font-medium">品牌设置</h2>
                 <div className="grid gap-5 md:grid-cols-2">
                     <section className="rounded-xl border border-stone-200 p-5 dark:border-stone-800">
                         <h2 className="text-base font-medium">公司名称</h2>
