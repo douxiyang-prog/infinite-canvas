@@ -18,7 +18,7 @@ afterAll(() => {
     else Reflect.deleteProperty(globalThis, "localStorage");
 });
 
-const { defaultConfig, resolveModelForCapability, useConfigStore } = await import("../src/stores/use-config-store");
+const { defaultConfig, guessCapability, resolveModelForCapability, useConfigStore } = await import("../src/stores/use-config-store");
 const { buildGenerationConfig } = await import("../src/lib/canvas/canvas-generation-helpers");
 const { CanvasNodeType } = await import("../src/types/canvas");
 
@@ -97,4 +97,8 @@ test("unavailable explicit selections are preserved for every generation capabil
     for (const capability of ["image", "video", "text", "audio"] as ModelCapability[]) {
         expect(resolveModelForCapability(config, `removed::${capability}`, capability)).toBe(`removed::${capability}`);
     }
+});
+
+test("Seedance models are classified as video models", () => {
+    expect(guessCapability("doubao-seedance-2-5-260628")).toBe("video");
 });

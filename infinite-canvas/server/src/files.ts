@@ -1,8 +1,14 @@
-import { createHash, randomUUID } from "node:crypto";
+import {
+  createHash,
+  createHmac,
+  randomUUID,
+  timingSafeEqual,
+} from "node:crypto";
 import { mkdir, rename, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import type { RowDataPacket } from "mysql2";
 
+import { config } from "./config";
 import { db } from "./db";
 import { HttpError } from "./http";
 import { requireStorageSettings, resolveStoragePath } from "./storage";
@@ -200,6 +206,72 @@ export async function saveFile(userId: number, form: FormData) {
   };
 }
 
+function publicFileSignature(
+  userId: number,
+  storageKey: string,
+  expiresAt: number,
+) {
+  if (!config.settingsEncryptionKey)
+    throw new HttpError(503, "未配置 SETTINGS_ENCRYPTION_KEY");
+  return createHmac("sha256", config.settingsEncryptionKey)
+    .update(`${userId}\n${expiresAt}\n${storageKey}`)
+    .digest("base64url");
+}
+
+export async function createPublicFileUrl(
+  userId: number,
+  storageKey: string,
+  _request: Request,
+) {
+  if (!STORAGE_KEY.test(storageKey))
+    throw new HttpError(400, "storageKey 格式不正确");
+  if (!config.publicBaseUrl)
+    throw new HttpError(
+      503,
+      "参考视频需要配置 CANVAS_PUBLIC_BASE_URL 为花生壳公网地址",
+    );
+  const [rows] = await db.execute<FileRow[]>(
+    `SELECT id FROM canvas_files
+      WHERE owner_user_id = ? AND storage_key = ? AND deleted_at IS NULL
+      LIMIT 1`,
+    [userId, storageKey],
+  );
+  if (!rows[0]) throw new HttpError(404, "文件不存在");
+  const expiresAt = Math.floor(Date.now() / 1000) + config.publicFileTtlSeconds;
+  const signature = publicFileSignature(userId, storageKey, expiresAt);
+  return `${config.publicBaseUrl}/api/public/files/${encodeURIComponent(storageKey)}?token=v1.${userId}.${expiresAt}.${signature}`;
+}
+
+function publicFileUser(storageKey: string, token: string) {
+  const [version, rawUserId, rawExpiresAt, signature] = token.split(".");
+  const userId = Number(rawUserId);
+  const expiresAt = Number(rawExpiresAt);
+  if (
+    version !== "v1" ||
+    !Number.isSafeInteger(userId) ||
+    userId <= 0 ||
+    !Number.isSafeInteger(expiresAt) ||
+    expiresAt <= Math.floor(Date.now() / 1000) ||
+    !signature
+  )
+    throw new HttpError(403, "文件访问链接无效或已过期");
+  const expected = publicFileSignature(userId, storageKey, expiresAt);
+  const actualBuffer = Buffer.from(signature);
+  const expectedBuffer = Buffer.from(expected);
+  if (
+    actualBuffer.length !== expectedBuffer.length ||
+    !timingSafeEqual(actualBuffer, expectedBuffer)
+  )
+    throw new HttpError(403, "文件访问链接无效或已过期");
+  return userId;
+}
+
+export async function getPublicFile(storageKey: string, request: Request) {
+  const token = new URL(request.url).searchParams.get("token") || "";
+  const userId = publicFileUser(storageKey, token);
+  return getFile(userId, storageKey, request, true);
+}
+
 function parseRange(value: string | null, size: number) {
   if (!value) return null;
   const match = /^bytes=(\d*)-(\d*)$/i.exec(value.trim());
@@ -225,6 +297,7 @@ export async function getFile(
   userId: number,
   storageKey: string,
   request: Request,
+  publicAccess = false,
 ) {
   const [rows] = await db.execute<FileRow[]>(
     `SELECT id, storage_key, relative_path, mime_type, bytes, sha256
@@ -243,7 +316,7 @@ export async function getFile(
   const range = parseRange(request.headers.get("range"), size);
   const headers = new Headers({
     "Accept-Ranges": "bytes",
-    "Cache-Control": "private, no-cache",
+    "Cache-Control": publicAccess ? "public, max-age=3600" : "private, no-cache",
     "Content-Type": row.mime_type,
     "ETag": `"${row.sha256}"`,
     "X-Content-Type-Options": "nosniff",

@@ -44,6 +44,19 @@ export async function uploadCanvasFile(input: Blob, options: { area?: FileArea; 
     return data as StoredServerFile;
 }
 
+export async function createPublicFileUrl(storageKey: string) {
+  const response = await fetch(
+    `/api/files/public-url?storageKey=${encodeURIComponent(storageKey)}`,
+    { credentials: "same-origin", cache: "no-store" },
+  );
+  const data = (await response.json().catch(() => null)) as
+    | { url?: string; error?: string }
+    | null;
+  if (!response.ok || !data?.url)
+    throw new Error(data?.error || `公网文件地址获取失败（${response.status}）`);
+  return data.url;
+}
+
 export function canvasFileUrl(storageKey: string) {
     return `/api/files/${encodeURIComponent(storageKey)}`;
 }

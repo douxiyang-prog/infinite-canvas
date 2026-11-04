@@ -4,6 +4,7 @@ import { nanoid } from "nanoid";
 import i18n from "@/i18n";
 import { dataUrlToFile, readFileAsDataUrl } from "@/lib/image-utils";
 import { clampVideoSeconds, computeVideoSize, inferVideoRatio } from "@/lib/media-size";
+import { createPublicFileUrl } from "@/services/api/files";
 import { getMediaBlob, resolveMediaUrl, uploadMediaFile, type UploadedFile } from "@/services/file-storage";
 import { imageToDataUrl } from "@/services/image-storage";
 import { boolConfig, buildApiUrl, modelOptionName, resolveModelRequestConfig, resolveModelScript, withLocalProxy, type AiConfig } from "@/stores/use-config-store";
@@ -141,6 +142,7 @@ export async function storeGeneratedVideo(result: VideoGenerationResult): Promis
 }
 
 async function createOpenAIVideoTask(config: AiConfig, model: string, prompt: string, references: ReferenceImage[], options?: VideoMediaOptions): Promise<VideoGenerationTask> {
+    if (isSeedanceVideoModel(model)) return createSeedanceVideoTask(config, model, prompt, references, options);
     const images = await Promise.all(references.map(async (image) => dataUrlToFile({ ...image, dataUrl: await imageToDataUrl(image) })));
     const videos = await Promise.all((options?.videos || []).map((video) => referenceMediaToFile(video, "ref.mp4", "invalidReferenceVideo", options)));
     const audios = await Promise.all((options?.audios || []).map((audio) => referenceMediaToFile(audio, "ref.mp3", "invalidReferenceAudio", options)));
@@ -182,6 +184,66 @@ async function createOpenAIVideoTask(config: AiConfig, model: string, prompt: st
     } catch (error) {
         throw new Error(readAxiosError(error, apiText("videoTaskCreateFailed")));
     }
+}
+
+async function createSeedanceVideoTask(config: AiConfig, model: string, prompt: string, references: ReferenceImage[], options?: VideoMediaOptions): Promise<VideoGenerationTask> {
+    const images = await Promise.all(references.map((image) => imageToDataUrl(image)));
+    const referenceVideos = options?.videos || [];
+    for (const video of referenceVideos) {
+        if (video.durationMs && (video.durationMs < 4000 || video.durationMs > 30000)) throw new Error(apiText("referenceVideoDuration"));
+    }
+    const videos = await Promise.all(referenceVideos.map((video) => publicReferenceMediaUrl(video, "invalidReferenceVideo")));
+    const audios = await Promise.all((options?.audios || []).map((audio) => publicReferenceMediaUrl(audio, "invalidReferenceAudio")));
+    const mode = resolveVideoMode(config.videoMode, images.length);
+    const followsFrameRatio = mode === "frames" && images.length > 0;
+    const followsInputVideo = videos.length > 0;
+    const content = buildSeedanceVideoContent(prompt, images, videos, audios, mode);
+
+    try {
+        const created = unwrapVideoResponse(
+            (
+                await axios.post<ApiVideoResponse>(
+                    aiApiUrl(config, "/videos"),
+                    {
+                        model: modelOptionName(model),
+                        prompt,
+                        seconds: buildSeedanceVideoSeconds(config, followsInputVideo),
+                        metadata: buildSeedanceVideoMetadata(config, content, followsFrameRatio, followsInputVideo),
+                    },
+                    { headers: aiHeaders(config, "application/json"), signal: options?.signal },
+                )
+            ).data,
+        );
+        if (!created.id) throw new Error(apiText("noVideoTaskId"));
+        return { id: created.id, provider: "openai", model };
+    } catch (error) {
+        throw new Error(readAxiosError(error, apiText("videoTaskCreateFailed")));
+    }
+}
+
+export function buildSeedanceVideoMetadata(config: AiConfig, content: Array<Record<string, unknown>>, followsFrameRatio: boolean, followsInputVideo = false) {
+    return {
+        content,
+        ...(followsInputVideo ? { ratio: "adaptive" } : followsFrameRatio ? {} : { ratio: videoAspectRatio(config.size) }),
+        resolution: normalizeVideoResolution(config.vquality),
+        generate_audio: boolConfig(config.videoGenerateAudio, true),
+        watermark: boolConfig(config.videoWatermark, false),
+    };
+}
+
+export function buildSeedanceVideoSeconds(config: AiConfig, followsInputVideo: boolean) {
+    return followsInputVideo ? -1 : Number(normalizeVideoSeconds(config.videoSeconds)) || 8;
+}
+
+export function buildSeedanceVideoContent(prompt: string, images: string[], videos: string[], audios: string[], mode: "frames" | "reference") {
+    const content: Array<Record<string, unknown>> = [{ type: "text", text: prompt }];
+    images.forEach((url, index) => {
+        const role = mode === "frames" ? (index === 0 ? "first_frame" : "last_frame") : "reference_image";
+        content.push({ type: "image_url", image_url: { url }, role });
+    });
+    for (const url of videos) content.push({ type: "video_url", video_url: { url }, role: "reference_video" });
+    for (const url of audios) content.push({ type: "audio_url", audio_url: { url }, role: "reference_audio" });
+    return content;
 }
 
 async function pollOpenAIVideoTask(config: AiConfig, task: VideoGenerationTask, options?: RequestOptions): Promise<VideoGenerationTaskState> {
@@ -312,6 +374,18 @@ async function referenceMediaToFile(item: { name: string; type?: string; url?: s
     return new File([blob], item.name || fallbackName, { type: item.type || blob.type || "application/octet-stream" });
 }
 
+async function publicReferenceMediaUrl(item: { url?: string; storageKey?: string }, errorKey: "invalidReferenceVideo" | "invalidReferenceAudio") {
+    if (item.storageKey) {
+        try {
+            return await createPublicFileUrl(item.storageKey);
+        } catch (error) {
+            throw new Error(error instanceof Error ? error.message : apiText(errorKey));
+        }
+    }
+    if (/^https?:\/\//i.test(item.url || "")) return item.url!;
+    throw new Error(apiText(errorKey));
+}
+
 function normalizeVideoSeconds(value: string) {
     return clampVideoSeconds(value);
 }
@@ -319,6 +393,10 @@ function normalizeVideoSeconds(value: string) {
 function resolveVideoMode(mode: string | undefined, imageCount: number) {
     if (mode === "reference" || imageCount > 2) return "reference";
     return "frames";
+}
+
+function isSeedanceVideoModel(model: string) {
+    return /seedance/i.test(modelOptionName(model));
 }
 
 function normalizeVideoSize(value: string, resolution?: string) {

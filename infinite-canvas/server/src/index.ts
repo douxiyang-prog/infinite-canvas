@@ -47,7 +47,12 @@ import {
   loadProject,
   saveProject,
 } from "./projects";
-import { getFile, saveFile } from "./files";
+import {
+  createPublicFileUrl,
+  getFile,
+  getPublicFile,
+  saveFile,
+} from "./files";
 import { purgeExpiredTrash, restoreProject } from "./trash";
 import { getGlobalConfig, saveGlobalConfig } from "./global-config";
 
@@ -200,6 +205,23 @@ async function handleApi(request: Request, url: URL) {
     if (!contentType.toLowerCase().includes("multipart/form-data"))
       throw new HttpError(415, "文件上传必须使用 multipart/form-data");
     return json(await saveFile(user.id, await request.formData()), 201);
+  }
+
+  if (request.method === "GET" && url.pathname === "/api/files/public-url") {
+    const user = await requireUser(request);
+    const storageKey = url.searchParams.get("storageKey")?.trim() || "";
+    return json({ url: await createPublicFileUrl(user.id, storageKey, request) });
+  }
+
+  const publicFileMatch = url.pathname.match(/^\/api\/public\/files\/([^/]+)$/);
+  if (
+    publicFileMatch &&
+    (request.method === "GET" || request.method === "HEAD")
+  ) {
+    return getPublicFile(
+      decodeURIComponent(publicFileMatch[1]),
+      request,
+    );
   }
 
   const fileMatch = url.pathname.match(/^\/api\/files\/([^/]+)$/);

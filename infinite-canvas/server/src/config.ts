@@ -30,6 +30,20 @@ function storageAllowedRoots() {
   return values;
 }
 
+function publicBaseUrl() {
+  const raw = process.env.CANVAS_PUBLIC_BASE_URL?.trim() || "";
+  if (!raw) return "";
+  let url: URL;
+  try {
+    url = new URL(raw);
+  } catch {
+    throw new Error("CANVAS_PUBLIC_BASE_URL 必须是有效的 HTTP(S) 地址");
+  }
+  if (url.protocol !== "http:" && url.protocol !== "https:")
+    throw new Error("CANVAS_PUBLIC_BASE_URL 必须是有效的 HTTP(S) 地址");
+  return raw.replace(/\/+$/, "");
+}
+
 export const config = {
   port: positiveNumber("PORT", 8080),
   mysqlHost: required("MYSQL_HOST"),
@@ -46,4 +60,6 @@ export const config = {
   storageAllowedRoots: storageAllowedRoots(),
   settingsEncryptionKey:
     process.env.SETTINGS_ENCRYPTION_KEY?.trim() || "",
+  publicBaseUrl: publicBaseUrl(),
+  publicFileTtlSeconds: positiveNumber("CANVAS_PUBLIC_FILE_TTL_SECONDS", 86400),
 };

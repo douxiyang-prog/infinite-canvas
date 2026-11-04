@@ -1,0 +1,166 @@
+---
+title: Seedance 云端更新
+description: Seedance 参考素材、花生壳公网文件和视频编辑模式的云端更新说明
+---
+
+# Seedance 云端更新
+
+本文记录 Seedance 视频模型接入 New API / 火山方舟后的云端更新方式、参数规则和验证步骤。
+
+## 本次更新内容
+
+- Seedance 模型自动归类为视频模型。
+- 首帧和首尾帧使用 `first_frame`、`last_frame` 角色，且不发送 `ratio`。
+- 全能参考使用 `reference_image`、`reference_video`、`reference_audio` 角色。
+- 参考视频和参考音频通过带签名的公网 URL 提交，不再转换为 Data URL。
+- 存在参考视频时，按视频编辑任务提交 `ratio: "adaptive"` 和 `duration: -1`。
+- 参考视频时长必须为 4–30 秒。
+
+## 前置条件
+
+花生壳需要将公网地址映射到 Canvas：
+
+```text
+花生壳公网地址 -> 192.168.1.68:3000
+```
+
+从公网访问以下地址应返回 `200`：
+
+```bash
+curl -I https://your-oray-domain.example.com/
+curl https://your-oray-domain.example.com/api/health
+```
+
+健康检查应返回：
+
+```json
+{"ok":true}
+```
+
+## 环境变量
+
+在 `/opt/infinite-canvas-deploy/.env` 中配置：
+
+```bash
+CANVAS_PUBLIC_BASE_URL=https://your-oray-domain.example.com
+CANVAS_PUBLIC_FILE_TTL_SECONDS=86400
+```
+
+`CANVAS_PUBLIC_BASE_URL` 必须是火山方舟可从公网访问的地址，不能填写内网 IP 或包含末尾斜杠。
+
+如果使用 HTTPS：
+
+```bash
+COOKIE_SECURE=true
+```
+
+如果花生壳当前只提供 HTTP：
+
+```bash
+COOKIE_SECURE=false
+```
+
+动态端口变化后，需要同步更新 `CANVAS_PUBLIC_BASE_URL` 并重启 API。
+
+## 构建与更新
+
+解压 r5 或更新版本源码后，在源码根目录执行：
+
+```bash
+sudo docker build \
+  --no-cache \
+  -t ghcr.io/douxiyang-prog/infinite-canvas:latest \
+  -f Dockerfile .
+
+sudo docker build \
+  --no-cache \
+  -t ghcr.io/douxiyang-prog/infinite-canvas-api:latest \
+  -f server/Dockerfile ./server
+```
+
+重建前端和 API 容器：
+
+```bash
+cd /opt/infinite-canvas-deploy
+sudo docker compose \
+  -f docker-compose.external-mysql.yml \
+  up -d --force-recreate api app
+```
+
+## 验证
+
+先确认服务状态：
+
+```bash
+sudo docker compose -f docker-compose.external-mysql.yml ps
+curl http://127.0.0.1:3000/api/health
+curl https://your-oray-domain.example.com/api/health
+```
+
+在浏览器强制刷新后，依次验证：
+
+| 场景 | 预期参数 |
+| --- | --- |
+| 纯文本生成视频 | 使用设置中的比例和时长 |
+| 单张首帧 | 不传 `ratio`，输出比例跟随图片 |
+| 两张首尾帧 | 不传 `ratio`，输出比例跟随首帧 |
+| 多图全能参考 | 图片使用 `reference_image`，使用设置中的比例 |
+| 视频编辑或视频参考 | `ratio=adaptive`、`duration=-1`，时长跟随输入视频 |
+
+参考视频和音频由 Ark 通过签名公网 URL 拉取。签名由服务器生成，默认有效期 24 小时，不包含用户登录 Cookie。
+
+## 常见错误
+
+### `reference media mode requires video role to be reference_video`
+
+当前前端仍是旧版本。确认线上 JavaScript 包含 `reference_video`，并重新构建前端。
+
+### `reference_video must be provided as a web url`
+
+API 尚未配置公网基础地址、花生壳映射不可访问，或 API 镜像仍是旧版本。
+
+### `ratio must be adaptive` 或 `duration must be -1`
+
+请求被识别为视频编辑，但仍提交了普通视频生成的比例或时长。确认使用的是包含视频编辑参数修复的版本。
+
+### 参考视频时长错误
+
+输入视频必须为 4–30 秒。更换视频或先裁剪，再重新提交。
+
+## 回滚
+
+在每次更新前备份当前前端和 API 镜像：
+
+```bash
+sudo docker tag \
+  ghcr.io/douxiyang-prog/infinite-canvas:latest \
+  ghcr.io/douxiyang-prog/infinite-canvas:backup-before-update
+
+sudo docker tag \
+  ghcr.io/douxiyang-prog/infinite-canvas-api:latest \
+  ghcr.io/douxiyang-prog/infinite-canvas-api:backup-before-update
+```
+
+回滚时恢复标签并重建容器：
+
+```bash
+sudo docker tag \
+  ghcr.io/douxiyang-prog/infinite-canvas:backup-before-update \
+  ghcr.io/douxiyang-prog/infinite-canvas:latest
+
+sudo docker tag \
+  ghcr.io/douxiyang-prog/infinite-canvas-api:backup-before-update \
+  ghcr.io/douxiyang-prog/infinite-canvas-api:latest
+
+cd /opt/infinite-canvas-deploy
+sudo docker compose \
+  -f docker-compose.external-mysql.yml \
+  up -d --force-recreate api app
+```
+
+## 安全说明
+
+- 公网文件接口必须携带服务器生成的签名，未签名请求仍需要登录。
+- 签名 URL 不应写入公开日志或长期保存。
+- 建议使用 HTTPS，避免参考素材在公网传输时被窃听。
+- 花生壳直接暴露 Canvas 时必须使用强管理员密码，并定期检查登录记录。

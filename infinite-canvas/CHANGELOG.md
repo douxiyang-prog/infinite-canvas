@@ -2,6 +2,7 @@
 
 ## Unreleased
 
++ [修复] 修复 Seedance 视频模型在 Canvas 中使用参考素材时无法提交的问题；Doubao/Seedance 改按结构化 `metadata.content` 提交，补齐参考图、视频和音频角色，通过花生壳等公网基础地址生成带签名的参考媒体 URL，首帧/首尾帧及参考视频编辑模式按 Ark 规则提交比例和时长，并自动将 Seedance 模型识别为视频模型。
 + [修复] 参考图转换兼容原始 storageKey、服务端文件地址、Blob URL 和 Data URL，避免模型脚本无法识别画布参考图。
 + [修复] 自定义模型调用脚本失败时保留 HTTP 状态码和供应商错误详情，不再只显示 Axios 通用状态。
 + [修复] 图片请求发送前增加 Data URL、Base64 解码和零字节校验，禁止把无效参考图发送给模型接口。
