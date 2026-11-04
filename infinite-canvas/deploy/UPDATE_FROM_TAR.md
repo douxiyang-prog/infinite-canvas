@@ -25,11 +25,25 @@ sudo chmod 755 /opt/infinite-canvas-deploy/update-canvas-from-tar.sh
 ```bash
 cd /opt/infinite-canvas-deploy
 
+sudo bash update-canvas-from-tar.sh
+```
+
+脚本会暂停并提示：
+
+```text
+更新包路径:
+```
+
+此时输入或粘贴 TAR 文件名、相对路径或完整路径，按回车后开始自动升级。路径包含空格时可以直接粘贴，也可以自行加双引号。
+
+也可以在命令后直接传参，适合无人值守执行：
+
+```bash
 sudo bash update-canvas-from-tar.sh \
   /tmp/seedance-canvas-build-src-20261104-r5.tar.gz
 ```
 
-也可以在脚本中填写默认包路径后执行。推荐每次都显式传参，避免误用旧包。
+推荐交互输入，方便每次确认实际使用的更新包。
 
 ## 花生壳端口变化
 

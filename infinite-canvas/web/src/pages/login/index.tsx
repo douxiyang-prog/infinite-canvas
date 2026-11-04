@@ -4,6 +4,7 @@ import { App, Button, Form, Input } from "antd";
 import { Navigate, useLocation, useNavigate } from "react-router-dom";
 
 import { BrandLogo } from "@/components/layout/brand-logo";
+import { LoginNebulaBackground } from "./components/login-nebula-background";
 import { useBrandingStore } from "@/stores/use-branding-store";
 import { useUserStore } from "@/stores/use-user-store";
 
@@ -42,8 +43,10 @@ export default function LoginPage() {
     };
 
     return (
-        <main className="flex min-h-dvh items-center justify-center bg-background bg-[radial-gradient(#e5e7eb_1px,transparent_1px)] px-6 py-10 text-foreground [background-size:16px_16px] dark:bg-[radial-gradient(rgba(245,245,244,.16)_1px,transparent_1px)]">
-            <section className="w-full max-w-[420px] rounded-2xl border border-stone-200 bg-background p-7 shadow-sm dark:border-stone-800">
+        <main className="relative isolate flex min-h-dvh items-center justify-center overflow-hidden px-6 py-10 text-foreground">
+            <LoginNebulaBackground />
+            <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_50%_42%,rgba(255,255,255,.08),transparent_42%)] dark:bg-[radial-gradient(circle_at_50%_42%,rgba(96,165,250,.08),transparent_42%)]" />
+            <section className="relative z-10 w-full max-w-[420px] rounded-2xl border border-white/80 bg-white/78 p-7 shadow-[0_28px_90px_-32px_rgba(51,65,85,.45)] backdrop-blur-2xl dark:border-white/[.12] dark:bg-black/72 dark:shadow-[0_28px_100px_-28px_rgba(0,0,0,.95)]">
                 <div className="mb-7 flex items-center gap-3">
                     <span className="grid size-14 shrink-0 place-items-center rounded-xl border border-stone-800 bg-stone-950">
                         <BrandLogo className="size-9" invertOnDark={false} />

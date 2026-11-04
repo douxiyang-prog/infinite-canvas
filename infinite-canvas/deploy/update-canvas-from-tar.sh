@@ -36,6 +36,7 @@ usage() {
   cat <<'EOF'
 Usage:
   sudo bash update-canvas-from-tar.sh <build-source.tar.gz>
+  sudo bash update-canvas-from-tar.sh
 
 The archive must be the full build source package containing:
   infinite-canvas/Dockerfile
@@ -47,11 +48,22 @@ Example:
 EOF
 }
 
-if [[ -z "$UPDATE_TAR" || "$UPDATE_TAR" == "-h" || "$UPDATE_TAR" == "--help" ]]; then
+if [[ "$UPDATE_TAR" == "-h" || "$UPDATE_TAR" == "--help" ]]; then
   usage
   exit 0
 fi
 
+if [[ -z "$UPDATE_TAR" ]]; then
+  printf '\n请输入完整构建源码 TAR 的文件名或路径。\n'
+  printf '例如：/tmp/seedance-canvas-build-src-20261104-r5.tar.gz\n\n'
+  read -r -p "更新包路径: " UPDATE_TAR || true
+  UPDATE_TAR="${UPDATE_TAR#\"}"
+  UPDATE_TAR="${UPDATE_TAR%\"}"
+  UPDATE_TAR="${UPDATE_TAR#\'}"
+  UPDATE_TAR="${UPDATE_TAR%\'}"
+fi
+
+[[ -n "$UPDATE_TAR" ]] || die "未输入更新包路径"
 [[ -f "$UPDATE_TAR" ]] || die "更新包不存在：$UPDATE_TAR"
 [[ -d "$DEPLOY_DIR" ]] || die "部署目录不存在：$DEPLOY_DIR"
 [[ -f "$DEPLOY_DIR/$COMPOSE_FILE" ]] || die "Compose 文件不存在：$DEPLOY_DIR/$COMPOSE_FILE"
