@@ -87,6 +87,17 @@ sudo docker compose \
   up -d --force-recreate api app
 ```
 
+### 自动升级脚本
+
+部署包包含 `deploy/update-canvas-from-tar.sh`。将脚本放到部署目录后，传入新的完整构建源码包即可：
+
+```bash
+cd /opt/infinite-canvas-deploy
+sudo bash update-canvas-from-tar.sh /tmp/new-canvas-build-src.tar.gz
+```
+
+脚本会备份镜像、强制构建前后端、检查镜像内容、重建容器、验证健康接口，并在部署后检查失败时自动回滚。详细说明见 `deploy/UPDATE_FROM_TAR.md`。
+
 ## 验证
 
 先确认服务状态：

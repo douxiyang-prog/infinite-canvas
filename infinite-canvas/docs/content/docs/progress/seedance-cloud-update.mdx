@@ -87,6 +87,17 @@ sudo docker compose \
   up -d --force-recreate api app
 ```
 
+### Automated upgrade script
+
+The deployment bundle includes `deploy/update-canvas-from-tar.sh`. Install it in the deployment directory and pass a full build-source archive:
+
+```bash
+cd /opt/infinite-canvas-deploy
+sudo bash update-canvas-from-tar.sh /tmp/new-canvas-build-src.tar.gz
+```
+
+The script backs up the current images, rebuilds both services, verifies the new image contents, recreates the containers, checks health, and rolls back automatically after a post-start failure. See `deploy/UPDATE_FROM_TAR.md` for details.
+
 ## Verification
 
 ```bash
