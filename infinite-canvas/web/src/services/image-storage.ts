@@ -222,11 +222,12 @@ export async function setImageBlob(storageKey: string, blob: Blob) {
 }
 
 export async function imageToDataUrl(image: { url?: string; dataUrl?: string; storageKey?: string }, options?: ImageReadOptions) {
-    if (image.dataUrl) return image.dataUrl;
+    if (image.dataUrl?.startsWith("data:")) return image.dataUrl;
     const blob = image.storageKey ? await getImageBlob(image.storageKey) : null;
     if (blob) return blobToDataUrl(blob);
-    const url = image.url || "";
-    if (!url || url.startsWith("data:")) return url;
+    const url = image.dataUrl || image.url || "";
+    if (!url) throw new Error(i18n.t("common.imageReadFailed"));
+    if (url.startsWith("data:")) return url;
     return blobToDataUrl(await fetchImageBlob(url, options));
 }
 

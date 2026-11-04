@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next";
 
 import { fetchGlobalConfig, saveGlobalConfig } from "@/services/api/global-config";
 import { useConfigStore } from "@/stores/use-config-store";
+import { usePromptSourceStore } from "@/stores/use-prompt-source-store";
 import { useUserStore } from "@/stores/use-user-store";
 
 export function useGlobalConfigSync() {
@@ -30,8 +31,9 @@ export function useGlobalConfigSync() {
             }
             saving = true;
             const { config, webdav } = useConfigStore.getState();
+            const { sources, schedule } = usePromptSourceStore.getState();
             try {
-                const saved = await saveGlobalConfig({ expectedVersion: version, config, webdav });
+                const saved = await saveGlobalConfig({ expectedVersion: version, config, webdav, promptSources: { sources, schedule } });
                 version = saved.version;
             } catch (error) {
                 ready = false;
@@ -62,6 +64,10 @@ export function useGlobalConfigSync() {
             if (state.config === previous.config && state.webdav === previous.webdav) return;
             scheduleSave();
         });
+        const unsubscribePromptSources = usePromptSourceStore.subscribe((state, previous) => {
+            if (state.sources === previous.sources && state.schedule === previous.schedule) return;
+            scheduleSave();
+        });
 
         fetchGlobalConfig()
             .then((snapshot) => {
@@ -70,8 +76,14 @@ export function useGlobalConfigSync() {
                 if (snapshot.config) {
                     useConfigStore.getState().applyGlobalConfig(snapshot.config, snapshot.webdav || {});
                 }
+                if (snapshot.promptSources) {
+                    usePromptSourceStore.getState().applyGlobalConfig(
+                        snapshot.promptSources.sources || [],
+                        snapshot.promptSources.schedule || {},
+                    );
+                }
                 ready = true;
-                if (!snapshot.config && user.role === "admin") scheduleSave(0);
+                if ((!snapshot.config || !snapshot.promptSources) && user.role === "admin") scheduleSave(0);
             })
             .catch((error) => {
                 if (!active) return;
@@ -82,6 +94,7 @@ export function useGlobalConfigSync() {
         return () => {
             active = false;
             unsubscribe();
+            unsubscribePromptSources();
             if (saveTimer) clearTimeout(saveTimer);
         };
     }, [i18n.resolvedLanguage, message, user]);

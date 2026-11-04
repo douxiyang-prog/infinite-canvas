@@ -25,7 +25,19 @@ type PromptSourceStore = {
     removeSource: (id: string) => void;
     toggleSource: (id: string, enabled: boolean) => void;
     updateSchedule: <K extends keyof PromptSourceSchedule>(key: K, value: PromptSourceSchedule[K]) => void;
+    applyGlobalConfig: (sources: PromptSource[], schedule: Partial<PromptSourceSchedule>) => void;
 };
+
+function normalizePromptSourceState(savedSourcesInput: unknown, scheduleInput: unknown): Pick<PromptSourceStore, "sources" | "schedule"> {
+    const savedSources = Array.isArray(savedSourcesInput) ? (savedSourcesInput as PromptSource[]) : [];
+    const enabledById = new Map(savedSources.map((source) => [source.id, source.enabled]));
+    const builtIn = DEFAULT_PROMPT_SOURCES.map((source) => ({ ...source, enabled: enabledById.get(source.id) ?? source.enabled }));
+    const custom = savedSources.filter((source) => !source.builtIn).map((source) => createPromptSource(source));
+    return {
+        sources: [...builtIn, ...custom],
+        schedule: { ...defaultSchedule, ...((scheduleInput || {}) as Partial<PromptSourceSchedule>) },
+    };
+}
 
 export const usePromptSourceStore = create<PromptSourceStore>()(
     persist(
@@ -42,17 +54,14 @@ export const usePromptSourceStore = create<PromptSourceStore>()(
             removeSource: (id) => set((state) => ({ sources: state.sources.filter((item) => item.id !== id || item.builtIn) })),
             toggleSource: (id, enabled) => set((state) => ({ sources: state.sources.map((item) => (item.id === id ? { ...item, enabled } : item)) })),
             updateSchedule: (key, value) => set((state) => ({ schedule: { ...state.schedule, [key]: value } })),
+            applyGlobalConfig: (sources, schedule) => set(normalizePromptSourceState(sources, schedule)),
         }),
         {
             name: PROMPT_SOURCE_STORE_KEY,
             partialize: (state) => ({ sources: state.sources, schedule: state.schedule }),
             merge: (persisted, current) => {
                 const persistedState = (persisted || {}) as Partial<PromptSourceStore>;
-                const savedSources = Array.isArray(persistedState.sources) ? persistedState.sources : [];
-                const enabledById = new Map(savedSources.map((source) => [source.id, source.enabled]));
-                const builtIn = DEFAULT_PROMPT_SOURCES.map((source) => ({ ...source, enabled: enabledById.get(source.id) ?? source.enabled }));
-                const custom = savedSources.filter((source) => !source.builtIn).map((source) => createPromptSource(source));
-                return { ...current, sources: [...builtIn, ...custom], schedule: { ...defaultSchedule, ...(persistedState.schedule || {}) } };
+                return { ...current, ...normalizePromptSourceState(persistedState.sources, persistedState.schedule) };
             },
         },
     ),

@@ -31,6 +31,7 @@ export type GlobalConfigSnapshot = {
   version: number;
   config: Record<string, unknown> | null;
   webdav: Record<string, unknown> | null;
+  promptSources: Record<string, unknown> | null;
   updatedAt: string | null;
 };
 
@@ -89,9 +90,19 @@ function snapshot(value: unknown): GlobalConfigSnapshot | null {
   }
   if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return null;
   const item = parsed as Record<string, unknown>;
-  if (item.kind === "encrypted") return decrypt(item as EncryptedValue);
-  if (item.kind === "plain") return (item as PlainValue).value;
-  return item as GlobalConfigSnapshot;
+  const valueSnapshot =
+    item.kind === "encrypted"
+      ? decrypt(item as EncryptedValue)
+      : item.kind === "plain"
+        ? (item as PlainValue).value
+        : (item as GlobalConfigSnapshot);
+  return {
+    version: Number(valueSnapshot.version) || 0,
+    config: valueSnapshot.config || null,
+    webdav: valueSnapshot.webdav || null,
+    promptSources: valueSnapshot.promptSources || null,
+    updatedAt: valueSnapshot.updatedAt || null,
+  };
 }
 
 async function readSnapshot() {
@@ -108,6 +119,7 @@ export async function getGlobalConfig() {
       version: 0,
       config: null,
       webdav: null,
+      promptSources: null,
       updatedAt: null,
     }
   );
@@ -118,6 +130,7 @@ export async function saveGlobalConfig(
     expectedVersion: number;
     config: unknown;
     webdav: unknown;
+    promptSources: unknown;
   },
   userId: number,
 ) {
@@ -125,6 +138,12 @@ export async function saveGlobalConfig(
     throw new HttpError(400, "配置格式不正确");
   if (!input.webdav || typeof input.webdav !== "object" || Array.isArray(input.webdav))
     throw new HttpError(400, "WebDAV 配置格式不正确");
+  if (
+    !input.promptSources ||
+    typeof input.promptSources !== "object" ||
+    Array.isArray(input.promptSources)
+  )
+    throw new HttpError(400, "提示词来源配置格式不正确");
   const current = await readSnapshot();
   const currentVersion = current?.version || 0;
   if (input.expectedVersion !== currentVersion)
@@ -134,6 +153,7 @@ export async function saveGlobalConfig(
     version: currentVersion + 1,
     config: input.config as Record<string, unknown>,
     webdav: input.webdav as Record<string, unknown>,
+    promptSources: input.promptSources as Record<string, unknown>,
     updatedAt: new Date().toISOString(),
   };
   if (!encryptionKey())

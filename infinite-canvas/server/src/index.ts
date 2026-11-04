@@ -106,6 +106,7 @@ async function handleApi(request: Request, url: URL) {
           expectedVersion,
           config: body.config,
           webdav: body.webdav,
+          promptSources: body.promptSources,
         },
         user.id,
       ),
