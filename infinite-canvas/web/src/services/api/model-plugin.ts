@@ -44,6 +44,24 @@ function pluginUrl(config: AiConfig, path: string) {
     return buildApiUrl(config.baseUrl, path.startsWith("/") ? path : `/${path}`);
 }
 
+function pluginErrorMessage(error: unknown) {
+    if (axios.isAxiosError(error)) {
+        const data = error.response?.data as unknown;
+        const record = data && typeof data === "object" ? (data as Record<string, unknown>) : null;
+        const nested = record?.error && typeof record.error === "object" ? (record.error as Record<string, unknown>) : null;
+        const detail =
+            (typeof nested?.message === "string" && nested.message) ||
+            (typeof record?.message === "string" && record.message) ||
+            (typeof record?.msg === "string" && record.msg) ||
+            (typeof data === "string" && data.trim()) ||
+            "";
+        const status = error.response?.status;
+        if (detail) return status ? `HTTP ${status}: ${detail.slice(0, 1000)}` : detail.slice(0, 1000);
+        if (status) return `HTTP ${status}: ${error.message}`;
+    }
+    return error instanceof Error ? error.message : String(error);
+}
+
 function createPluginHttp(config: AiConfig, options?: RequestOptions): PluginHttp {
     const run = async (method: "get" | "post", path: string, body: unknown, opts?: PluginHttpOptions) => {
         const isForm = typeof FormData !== "undefined" && body instanceof FormData;
@@ -158,8 +176,7 @@ export async function runModelPlugin<T = unknown>(args: RunPluginArgs): Promise<
     } catch (error) {
         if (error instanceof DOMException && error.name === "AbortError") throw error;
         if (axios.isCancel(error)) throw error;
-        const message = error instanceof Error ? error.message : String(error);
-        throw new Error(i18n.t("modelPlugin.executionFailed", { message }));
+        throw new Error(i18n.t("modelPlugin.executionFailed", { message: pluginErrorMessage(error) }));
     }
 }
 

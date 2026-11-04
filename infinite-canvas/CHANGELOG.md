@@ -2,6 +2,10 @@
 
 ## Unreleased
 
++ [修复] 参考图转换兼容原始 storageKey、服务端文件地址、Blob URL 和 Data URL，避免模型脚本无法识别画布参考图。
++ [修复] 自定义模型调用脚本失败时保留 HTTP 状态码和供应商错误详情，不再只显示 Axios 通用状态。
++ [修复] 图片请求发送前增加 Data URL、Base64 解码和零字节校验，禁止把无效参考图发送给模型接口。
++ [修复] 修复 Windows 打包源码后 Linux 前端容器因入口脚本 CRLF 换行而反复重启的问题。
 + [修复] 修复服务端文件地址被误当作 Base64 图片发送的问题，模型切换和图生图请求会先转换为标准 Data URL。
 + [新增] 新增纯 Windows Docker Desktop 独立部署目录，使用独立 MySQL 数据卷和本地画布存储目录。
 + [新增] 模型渠道、生成偏好、提示词来源和 WebDAV 等全局配置改为 MySQL 持久化，管理员修改后自动同步数据库；浏览器缓存用于即时加载，API Key 与 WebDAV 凭据使用 SETTINGS_ENCRYPTION_KEY 加密保存。
