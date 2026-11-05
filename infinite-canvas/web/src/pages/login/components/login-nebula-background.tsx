@@ -267,7 +267,13 @@ export function LoginNebulaBackground() {
 
     return (
         <div aria-hidden="true" className="pointer-events-none absolute inset-0 overflow-hidden">
-            <div className="absolute inset-0 bg-black bg-[radial-gradient(circle_at_18%_20%,#dbeafe_0%,transparent_34%),radial-gradient(circle_at_82%_18%,#ede9fe_0%,transparent_32%),radial-gradient(circle_at_58%_88%,#cffafe_0%,transparent_38%),linear-gradient(135deg,#f8fafc_0%,#eef2ff_52%,#f8fafc_100%)] dark:bg-[radial-gradient(circle_at_18%_20%,#0a2a63_0%,transparent_38%),radial-gradient(circle_at_82%_18%,#2a0b4e_0%,transparent_35%),radial-gradient(circle_at_58%_88%,#003d49_0%,transparent_40%),linear-gradient(#000,#000)]" />
+            <div
+                className={
+                    dark
+                        ? "absolute inset-0 bg-black"
+                        : "absolute inset-0 bg-[radial-gradient(circle_at_18%_20%,#dbeafe_0%,transparent_34%),radial-gradient(circle_at_82%_18%,#ede9fe_0%,transparent_32%),radial-gradient(circle_at_58%_88%,#cffafe_0%,transparent_38%),linear-gradient(135deg,#f8fafc_0%,#eef2ff_52%,#f8fafc_100%)]"
+                }
+            />
             <canvas ref={canvasRef} className="absolute inset-0 size-full" />
             <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,transparent_20%,rgba(248,250,252,.35)_68%,rgba(241,245,249,.72)_100%)] dark:bg-[radial-gradient(ellipse_at_center,transparent_26%,rgba(0,0,0,.24)_62%,rgba(0,0,0,.92)_100%)]" />
             <div className="absolute inset-0 opacity-[0.16] [background-image:radial-gradient(rgba(30,41,59,.45)_0.6px,transparent_0.6px)] [background-size:22px_22px] dark:opacity-[0.08] dark:[background-image:radial-gradient(rgba(255,255,255,.55)_0.6px,transparent_0.6px)]" />

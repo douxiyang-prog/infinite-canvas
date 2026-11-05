@@ -7,6 +7,7 @@ export const MAX_LOGO_BYTES = 2 * 1024 * 1024;
 
 type BrandingRow = RowDataPacket & {
   company_name: string;
+  login_background: string | null;
   logo_mime: string | null;
   logo_updated_at: Date | string | null;
 };
@@ -18,6 +19,7 @@ type LogoRow = RowDataPacket & {
 
 export type BrandingInfo = {
   companyName: string | null;
+  loginBackground: "original" | "nebula";
   logoUrl: string | null;
   updatedAt: string | null;
 };
@@ -32,12 +34,14 @@ function dateIso(value: Date | string | null) {
 
 export async function getBranding(): Promise<BrandingInfo> {
   const [rows] = await db.query<BrandingRow[]>(
-    "SELECT company_name, logo_mime, logo_updated_at FROM app_settings WHERE id = 1",
+    "SELECT company_name, login_background, logo_mime, logo_updated_at FROM app_settings WHERE id = 1",
   );
   const row = rows[0];
   const updatedAt = dateIso(row?.logo_updated_at ?? null);
   return {
     companyName: row?.company_name || null,
+    loginBackground:
+      row?.login_background === "nebula" ? "nebula" : "original",
     logoUrl:
       row?.logo_mime && updatedAt
         ? `/api/branding/logo?v=${encodeURIComponent(updatedAt)}`
@@ -51,6 +55,17 @@ export async function updateCompanyName(companyName: string) {
     `INSERT INTO app_settings (id, company_name) VALUES (1, ?)
      ON DUPLICATE KEY UPDATE company_name = VALUES(company_name)`,
     [companyName],
+  );
+  return getBranding();
+}
+
+export async function updateLoginBackground(
+  loginBackground: "original" | "nebula",
+) {
+  await db.execute(
+    `INSERT INTO app_settings (id, login_background) VALUES (1, ?)
+     ON DUPLICATE KEY UPDATE login_background = VALUES(login_background)`,
+    [loginBackground],
   );
   return getBranding();
 }

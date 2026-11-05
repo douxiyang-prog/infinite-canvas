@@ -2,9 +2,12 @@ import { apiRequest } from "@/services/api/auth";
 
 export type BrandingInfo = {
     companyName: string | null;
+    loginBackground: LoginBackgroundMode;
     logoUrl: string | null;
     updatedAt: string | null;
 };
+
+export type LoginBackgroundMode = "original" | "nebula";
 
 export const MAX_BRANDING_LOGO_BYTES = 2 * 1024 * 1024;
 export const BRANDING_LOGO_TYPES = ["image/png", "image/jpeg", "image/webp"];
@@ -17,6 +20,13 @@ export async function updateBrandingCompanyName(companyName: string) {
     return apiRequest<BrandingInfo>("/api/admin/branding", {
         method: "PATCH",
         body: JSON.stringify({ companyName }),
+    });
+}
+
+export async function updateLoginBackground(loginBackground: LoginBackgroundMode) {
+    return apiRequest<BrandingInfo>("/api/admin/branding/login-background", {
+        method: "PATCH",
+        body: JSON.stringify({ loginBackground }),
     });
 }
 

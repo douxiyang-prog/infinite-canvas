@@ -30,6 +30,7 @@ CREATE TABLE IF NOT EXISTS user_sessions (
 CREATE TABLE IF NOT EXISTS app_settings (
     id TINYINT UNSIGNED NOT NULL,
     company_name VARCHAR(100) NOT NULL DEFAULT '',
+    login_background VARCHAR(20) NOT NULL DEFAULT 'original',
     logo_data MEDIUMBLOB NULL,
     logo_mime VARCHAR(64) NULL,
     logo_updated_at DATETIME(3) NULL,

@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="zh-CN">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>翻页钟字体方案</title>
+        <style>
+            * {
+                box-sizing: border-box;
+            }
+            html,
+            body {
+                width: 100%;
+                height: 100%;
+                margin: 0;
+            }
+            body {
+                display: grid;
+                place-items: center;
+                overflow: hidden;
+                background:
+                    radial-gradient(circle at 20% 28%, rgba(37, 99, 235, 0.12), transparent 34%),
+                    radial-gradient(circle at 82% 20%, rgba(124, 58, 237, 0.1), transparent 32%),
+                    #05070d;
+                color: #f7f7f2;
+                font-family: Arial, sans-serif;
+            }
+            .sample {
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                gap: 26px;
+            }
+            .label {
+                color: rgba(255, 255, 255, 0.58);
+                font-size: 16px;
+                letter-spacing: 0.16em;
+                text-transform: uppercase;
+            }
+            .clock {
+                display: flex;
+                gap: 10px;
+            }
+            .card {
+                position: relative;
+                width: 270px;
+                height: 300px;
+                overflow: hidden;
+                border: 1px solid rgba(255, 255, 255, 0.11);
+                border-radius: 18px;
+                background: #262722;
+                box-shadow:
+                    0 30px 72px rgba(0, 0, 0, 0.44),
+                    inset 0 1px 0 rgba(255, 255, 255, 0.1);
+            }
+            .top,
+            .bottom {
+                position: absolute;
+                inset-inline: 0;
+                height: calc(50% - 3px);
+            }
+            .top {
+                top: 0;
+                background: linear-gradient(180deg, #414239 0%, #30312b 100%);
+            }
+            .bottom {
+                bottom: 0;
+                background: linear-gradient(180deg, #242520 0%, #191a17 100%);
+            }
+            .digits {
+                position: absolute;
+                inset: 0;
+                z-index: 10;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                font-size: 190px;
+                font-weight: 700;
+                line-height: 1;
+                letter-spacing: -0.085em;
+                font-variant-numeric: tabular-nums;
+            }
+            .seam {
+                position: absolute;
+                inset-inline: 0;
+                top: 50%;
+                z-index: 20;
+                height: 6px;
+                transform: translateY(-50%);
+                background: #000;
+                box-shadow:
+                    0 -1px 0 rgba(255, 255, 255, 0.1),
+                    0 1px 0 rgba(255, 255, 255, 0.04);
+            }
+        </style>
+    </head>
+    <body>
+        <main class="sample">
+            <div class="label" id="label"></div>
+            <div class="clock">
+                <div class="card">
+                    <div class="top"></div>
+                    <div class="bottom"></div>
+                    <div class="digits" id="hour">10</div>
+                    <div class="seam"></div>
+                </div>
+                <div class="card">
+                    <div class="top"></div>
+                    <div class="bottom"></div>
+                    <div class="digits" id="minute">38</div>
+                    <div class="seam"></div>
+                </div>
+            </div>
+        </main>
+        <script>
+            const samples = [
+                { label: "方案 1 · 圆角粗体", family: '"Arial Rounded MT Bold", "Arial Rounded MT", Arial, sans-serif', weight: 700 },
+                { label: "方案 2 · 黑体方角", family: '"Arial Black", Arial, sans-serif', weight: 900 },
+                { label: "方案 3 · 窄体冲击", family: 'Impact, Haettenschweiler, sans-serif', weight: 400 },
+                { label: "方案 4 · 柔和几何", family: '"Trebuchet MS", Arial, sans-serif', weight: 700 },
+                { label: "方案 5 · 现代工业", family: '"Segoe UI Black", "Segoe UI", sans-serif', weight: 900 },
+            ];
+            const index = Math.max(0, Math.min(4, Number(new URLSearchParams(location.search).get("v") || 1) - 1));
+            const sample = samples[index];
+            document.getElementById("label").textContent = sample.label;
+            for (const element of document.querySelectorAll(".digits")) {
+                element.style.fontFamily = sample.family;
+                element.style.fontWeight = String(sample.weight);
+            }
+        </script>
+    </body>
+</html>

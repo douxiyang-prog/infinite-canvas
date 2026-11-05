@@ -33,6 +33,14 @@ export async function migrate() {
       .filter(Boolean);
     for (const statement of statements) await db.query(statement);
   }
+  const [columns] = await db.query<
+    Array<RowDataPacket & { Field: string }>
+  >("SHOW COLUMNS FROM app_settings LIKE 'login_background'");
+  if (!columns.length) {
+    await db.query(
+      "ALTER TABLE app_settings ADD COLUMN login_background VARCHAR(20) NOT NULL DEFAULT 'original' AFTER company_name",
+    );
+  }
 }
 
 export async function bootstrapAdmin() {

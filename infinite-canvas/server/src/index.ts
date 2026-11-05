@@ -10,6 +10,7 @@ import {
   getLogo,
   MAX_LOGO_BYTES,
   updateCompanyName,
+  updateLoginBackground,
   updateLogo,
 } from "./branding";
 import { config } from "./config";
@@ -319,6 +320,20 @@ async function handleApi(request: Request, url: URL) {
     const mime = detectLogoMime(data);
     if (!mime) throw new HttpError(415, "Logo 仅支持 PNG、JPEG 或 WebP");
     return json(await updateLogo(data, mime));
+  }
+
+  if (
+    request.method === "PATCH" &&
+    url.pathname === "/api/admin/branding/login-background"
+  ) {
+    await requireAdmin(request);
+    const body = await readJson(request);
+    if (
+      body.loginBackground !== "original" &&
+      body.loginBackground !== "nebula"
+    )
+      throw new HttpError(400, "登录页背景选项不正确");
+    return json(await updateLoginBackground(body.loginBackground));
   }
 
   if (request.method === "POST" && url.pathname === "/api/admin/users") {

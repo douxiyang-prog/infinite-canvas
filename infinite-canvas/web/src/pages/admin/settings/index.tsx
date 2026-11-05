@@ -1,12 +1,19 @@
 import { Save, UploadCloud } from "lucide-react";
 import { useEffect, useState } from "react";
-import { App, Button, Form, Input, Upload } from "antd";
+import { App, Button, Form, Input, Segmented, Upload } from "antd";
 import type { UploadProps } from "antd";
 import { Navigate } from "react-router-dom";
 
 import { BrandLogo } from "@/components/layout/brand-logo";
 import { AppConfigPanel } from "@/components/layout/app-config-modal";
-import { BRANDING_LOGO_TYPES, MAX_BRANDING_LOGO_BYTES, updateBrandingCompanyName, uploadBrandingLogo } from "@/services/api/branding";
+import {
+    BRANDING_LOGO_TYPES,
+    MAX_BRANDING_LOGO_BYTES,
+    updateBrandingCompanyName,
+    updateLoginBackground,
+    uploadBrandingLogo,
+    type LoginBackgroundMode,
+} from "@/services/api/branding";
 import { useBrandingStore } from "@/stores/use-branding-store";
 import { useUserStore } from "@/stores/use-user-store";
 
@@ -24,8 +31,10 @@ function AdminSettings() {
     const { message } = App.useApp();
     const [form] = Form.useForm<BrandingValues>();
     const companyName = useBrandingStore((state) => state.companyName);
+    const loginBackground = useBrandingStore((state) => state.loginBackground);
     const applyBranding = useBrandingStore((state) => state.applyBranding);
     const [savingName, setSavingName] = useState(false);
+    const [savingBackground, setSavingBackground] = useState(false);
     const [uploadingLogo, setUploadingLogo] = useState(false);
 
     useEffect(() => {
@@ -63,6 +72,19 @@ function AdminSettings() {
             setUploadingLogo(false);
         }
         return Upload.LIST_IGNORE;
+    };
+
+    const saveLoginBackground = async (value: LoginBackgroundMode) => {
+        if (value === loginBackground) return;
+        setSavingBackground(true);
+        try {
+            applyBranding(await updateLoginBackground(value));
+            message.success(value === "nebula" ? "登录页已切换为星云背景" : "登录页已恢复原始界面");
+        } catch (error) {
+            message.error(error instanceof Error ? error.message : "保存登录页背景失败");
+        } finally {
+            setSavingBackground(false);
+        }
     };
 
     return (
@@ -111,6 +133,24 @@ function AdminSettings() {
                         </Upload.Dragger>
                     </section>
                 </div>
+
+                <section className="mt-5 rounded-xl border border-stone-200 p-5 dark:border-stone-800">
+                    <div className="flex flex-col justify-between gap-4 md:flex-row md:items-center">
+                        <div>
+                            <h2 className="text-base font-medium">登录页背景</h2>
+                            <p className="mt-1 text-sm text-stone-500">选择所有用户看到的登录页样式；“原始登录页”保持原有的简洁点阵背景。</p>
+                        </div>
+                        <Segmented<LoginBackgroundMode>
+                            value={loginBackground}
+                            disabled={savingBackground}
+                            options={[
+                                { label: "原始登录页", value: "original" },
+                                { label: "星云动态背景", value: "nebula" },
+                            ]}
+                            onChange={(value) => void saveLoginBackground(value)}
+                        />
+                    </div>
+                </section>
             </div>
         </main>
     );
