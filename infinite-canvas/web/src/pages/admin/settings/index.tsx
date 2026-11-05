@@ -104,7 +104,7 @@ function AdminSettings() {
                 </section>
 
                 <h2 className="mb-4 text-base font-medium">品牌设置</h2>
-                <div className="grid gap-5 md:grid-cols-2">
+                <div className="grid auto-rows-max items-start gap-5 md:grid-cols-2">
                     <section className="rounded-xl border border-stone-200 p-5 dark:border-stone-800">
                         <h2 className="text-base font-medium">公司名称</h2>
                         <p className="mt-1 text-sm text-stone-500">用于登录页、首页、顶部导航和浏览器标题。</p>
@@ -124,7 +124,7 @@ function AdminSettings() {
                         <div className="my-5 flex min-h-24 items-center justify-center rounded-lg border border-dashed border-stone-300 bg-white p-5 dark:border-stone-700">
                             <BrandLogo className="h-12 max-w-56" invertOnDark={false} />
                         </div>
-                        <Upload.Dragger accept="image/png,image/jpeg,image/webp" maxCount={1} showUploadList={false} beforeUpload={beforeUpload} disabled={uploadingLogo}>
+                        <Upload.Dragger className="!block h-[220px]" accept="image/png,image/jpeg,image/webp" maxCount={1} showUploadList={false} beforeUpload={beforeUpload} disabled={uploadingLogo}>
                             <p className="ant-upload-drag-icon">
                                 <UploadCloud className="mx-auto size-6 text-stone-500" />
                             </p>
