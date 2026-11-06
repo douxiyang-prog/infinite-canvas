@@ -20,6 +20,9 @@ export async function apiRequest<T>(path: string, init: RequestInit = {}): Promi
     });
     const data = (await response.json().catch(() => null)) as { error?: string } | T | null;
     if (!response.ok) {
+        if (response.status === 401 && !path.startsWith("/api/auth/") && typeof window !== "undefined") {
+            window.dispatchEvent(new Event("session-replaced"));
+        }
         const error = data && typeof data === "object" ? (data as { error?: string }).error : null;
         throw new ApiError(response.status, error || `请求失败（${response.status}）`);
     }

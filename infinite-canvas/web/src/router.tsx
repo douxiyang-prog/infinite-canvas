@@ -5,6 +5,7 @@ import { RequireSetup } from "@/components/auth/require-setup";
 import { AnalyticsTracker } from "@/components/layout/analytics-tracker";
 import UserLayout from "@/layouts/user-layout";
 import AdminSettingsPage from "@/pages/admin/settings";
+import AdminUserChannelsPage from "@/pages/admin/user-channels";
 import AdminUsersPage from "@/pages/admin/users";
 import AssetsPage from "@/pages/assets";
 import CanvasPage from "@/pages/canvas";
@@ -41,6 +42,7 @@ export const router = createBrowserRouter([
                     { path: "/canvas/:id", element: <CanvasProjectPage /> },
                     { path: "/config", element: <Navigate to="/admin/settings" replace /> },
                     { path: "/admin/settings", element: <AdminSettingsPage /> },
+                    { path: "/admin/user-channels", element: <AdminUserChannelsPage /> },
                     { path: "/admin/users", element: <AdminUsersPage /> },
                 ],
             },

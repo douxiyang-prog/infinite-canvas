@@ -79,6 +79,7 @@ The current release needs manual verification in these areas:
 - Canvas video task resume: starting an OpenAI-style video generation should store the remote task ID on the video node. After a page refresh, a still-pending video should keep polling automatically; if polling stopped, **Get task status** should resume with that task ID until the video is ready, the task fails, or the status request errors. Task failure should then allow a normal retry that creates a new generation.
 
 - Server-backed assets: adding, editing, deleting, importing, and WebDAV-syncing My Assets must update `users/<userId>/assets/assets.json` under the configured storage root. After clearing browser storage or opening the same account in another browser, all text and media assets must return; accounts in the same browser must not share a catalog. Existing `infinite-canvas:asset_store` data should be imported once and removed only after the server confirms the import.
+- Single active login: log the same account in through the public and internal addresses in separate browsers. The second login must invalidate the first browser on its next API request, show a session-expired notice, and return it to the login page. Multiple tabs in the same browser must keep working because they share the same session cookie.
 
 The Chinese version contains the complete item-by-item acceptance checklist.
 

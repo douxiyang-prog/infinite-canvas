@@ -15,6 +15,10 @@ export function fetchGlobalConfig() {
     return apiRequest<GlobalConfigResponse>("/api/config");
 }
 
+export function fetchUserConfig() {
+    return apiRequest<GlobalConfigResponse>("/api/user-config");
+}
+
 export function saveGlobalConfig(input: { expectedVersion: number; config: AiConfig; webdav: WebdavSyncConfig; promptSources: { sources: PromptSource[]; schedule: PromptSourceSchedule } }) {
     return apiRequest<GlobalConfigResponse>("/api/config", {
         method: "PUT",

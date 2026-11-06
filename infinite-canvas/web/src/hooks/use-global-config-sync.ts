@@ -2,7 +2,7 @@ import { useEffect } from "react";
 import { App } from "antd";
 import { useTranslation } from "react-i18next";
 
-import { fetchGlobalConfig, saveGlobalConfig } from "@/services/api/global-config";
+import { fetchGlobalConfig, fetchUserConfig, saveGlobalConfig, type GlobalConfigResponse } from "@/services/api/global-config";
 import { useConfigStore } from "@/stores/use-config-store";
 import { usePromptSourceStore } from "@/stores/use-prompt-source-store";
 import { useUserStore } from "@/stores/use-user-store";
@@ -13,7 +13,7 @@ export function useGlobalConfigSync() {
     const user = useUserStore((state) => state.user);
 
     useEffect(() => {
-        if (!user || user.role !== "admin") return;
+        if (!user) return;
         let active = true;
         let ready = false;
         let version = 0;
@@ -22,6 +22,37 @@ export function useGlobalConfigSync() {
         let pending = false;
 
         const english = i18n.resolvedLanguage === "en-US";
+        useConfigStore.getState().resetConfigForSession();
+
+        const applySnapshot = (snapshot: GlobalConfigResponse) => {
+            version = snapshot.version;
+            useConfigStore.getState().applyGlobalConfig(snapshot.config || {
+                channels: [],
+            }, snapshot.webdav || {});
+            if (snapshot.promptSources) {
+                usePromptSourceStore.getState().applyGlobalConfig(
+                    snapshot.promptSources.sources || [],
+                    snapshot.promptSources.schedule || {},
+                );
+            }
+        };
+
+        if (user.role !== "admin") {
+            fetchUserConfig()
+                .then((snapshot) => {
+                    if (!active) return;
+                    applySnapshot(snapshot);
+                })
+                .catch((error) => {
+                    if (!active) return;
+                    const description = error instanceof Error ? error.message : String(error);
+                    useConfigStore.getState().setConfigHydrated(true);
+                    message.error(english ? `Could not load account channels: ${description}` : `账号渠道加载失败：${description}`);
+                });
+            return () => {
+                active = false;
+            };
+        }
 
         const flush = async () => {
             if (!active || !ready) return;
@@ -73,9 +104,9 @@ export function useGlobalConfigSync() {
             .then((snapshot) => {
                 if (!active) return;
                 version = snapshot.version;
-                if (snapshot.config) {
-                    useConfigStore.getState().applyGlobalConfig(snapshot.config, snapshot.webdav || {});
-                }
+                useConfigStore.getState().applyGlobalConfig(snapshot.config || {
+                    channels: [],
+                }, snapshot.webdav || {});
                 if (snapshot.promptSources) {
                     usePromptSourceStore.getState().applyGlobalConfig(
                         snapshot.promptSources.sources || [],
@@ -88,6 +119,7 @@ export function useGlobalConfigSync() {
             .catch((error) => {
                 if (!active) return;
                 const description = error instanceof Error ? error.message : String(error);
+                useConfigStore.getState().setConfigHydrated(true);
                 message.error(english ? `Could not load global settings: ${description}` : `全局设置加载失败：${description}`);
             });
 

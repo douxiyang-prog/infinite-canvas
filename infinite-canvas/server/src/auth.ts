@@ -13,6 +13,7 @@ import {
 const SESSION_COOKIE = "infinite_canvas_session";
 
 type SessionUserRow = RowDataPacket & {
+  session_id: number;
   id: number;
   username: string;
   display_name: string;
@@ -71,10 +72,28 @@ export async function createSession(request: Request, userId: number) {
   await db.execute(
     "DELETE FROM user_sessions WHERE expires_at <= CURRENT_TIMESTAMP(3)",
   );
-  await db.execute(
-    "INSERT INTO user_sessions (user_id, token_hash, expires_at, last_seen_at) VALUES (?, ?, ?, ?)",
-    [userId, tokenHash, expiresAt, now],
-  );
+  const connection = await db.getConnection();
+  try {
+    await connection.beginTransaction();
+    await connection.execute(
+      "SELECT id FROM users WHERE id = ? FOR UPDATE",
+      [userId],
+    );
+    await connection.execute(
+      "INSERT INTO user_sessions (user_id, token_hash, expires_at, last_seen_at) VALUES (?, ?, ?, ?)",
+      [userId, tokenHash, expiresAt, now],
+    );
+    await connection.execute(
+      "DELETE FROM user_sessions WHERE user_id = ? AND token_hash <> ?",
+      [userId, tokenHash],
+    );
+    await connection.commit();
+  } catch (error) {
+    await connection.rollback().catch(() => undefined);
+    throw error;
+  } finally {
+    connection.release();
+  }
   await markLogin(userId);
   return sessionCookie(request, token);
 }
@@ -86,7 +105,7 @@ export async function currentUser(
   if (!token) return null;
   const tokenHash = await hashToken(token);
   const [rows] = await db.execute<SessionUserRow[]>(
-    `SELECT u.id, u.username, u.display_name, u.role, u.status, u.last_login_at, u.created_at, u.updated_at
+    `SELECT s.id AS session_id, u.id, u.username, u.display_name, u.role, u.status, u.last_login_at, u.created_at, u.updated_at
          FROM user_sessions s
          JOIN users u ON u.id = s.user_id
          WHERE s.token_hash = ? AND s.expires_at > CURRENT_TIMESTAMP(3) AND u.status = 'active'
@@ -95,6 +114,26 @@ export async function currentUser(
   );
   const row = rows[0];
   if (!row) return null;
+  const [latestRows] = await db.execute<
+    Array<RowDataPacket & { id: number }>
+  >(
+    `SELECT id FROM user_sessions
+      WHERE user_id = ? AND expires_at > CURRENT_TIMESTAMP(3)
+      ORDER BY id DESC
+      LIMIT 1`,
+    [row.id],
+  );
+  const latestSessionId = Number(latestRows[0]?.id || 0);
+  if (latestSessionId !== Number(row.session_id)) {
+    await db.execute("DELETE FROM user_sessions WHERE id = ?", [
+      row.session_id,
+    ]);
+    return null;
+  }
+  await db.execute(
+    "DELETE FROM user_sessions WHERE user_id = ? AND id <> ?",
+    [row.id, row.session_id],
+  );
   await db.execute(
     "UPDATE user_sessions SET last_seen_at = CURRENT_TIMESTAMP(3) WHERE token_hash = ?",
     [tokenHash],

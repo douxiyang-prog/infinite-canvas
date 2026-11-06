@@ -1,7 +1,7 @@
 import type { CSSProperties } from "react";
 import { Dropdown, Tooltip } from "antd";
 import type { MenuProps } from "antd";
-import { Keyboard, LogOut, Puzzle, Settings2, SlidersHorizontal, Users } from "lucide-react";
+import { Keyboard, LogOut, Puzzle, RadioTower, Settings2, SlidersHorizontal, Users } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 
@@ -55,6 +55,7 @@ export function UserStatusActions({ showConfig = true, variant = "default", onOp
                             label: "管理",
                             children: [
                                 { key: "users", icon: <Users className="size-4" />, label: "用户管理", onClick: () => navigate("/admin/users") },
+                                { key: "user-channels", icon: <RadioTower className="size-4" />, label: "用户渠道配置", onClick: () => navigate("/admin/user-channels") },
                                 { key: "global", icon: <SlidersHorizontal className="size-4" />, label: "全局管理", onClick: () => navigate("/admin/settings") },
                             ],
                         },

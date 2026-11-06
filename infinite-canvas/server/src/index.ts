@@ -64,6 +64,11 @@ import {
 } from "./assets";
 import { purgeExpiredTrash, restoreProject } from "./trash";
 import { getGlobalConfig, saveGlobalConfig } from "./global-config";
+import {
+  getEffectiveUserConfig,
+  getUserChannelAssignment,
+  saveUserChannelAssignment,
+} from "./user-channels";
 
 function roleValue(value: unknown, fallback?: UserRole): UserRole | undefined {
   if (value === undefined) return fallback;
@@ -176,6 +181,11 @@ async function handleApi(request: Request, url: URL) {
   if (request.method === "GET" && url.pathname === "/api/projects") {
     const user = await requireUser(request);
     return json(await listProjects(user.id));
+  }
+
+  if (request.method === "GET" && url.pathname === "/api/user-config") {
+    const user = await requireUser(request);
+    return json(await getEffectiveUserConfig(user.id));
   }
 
   if (request.method === "GET" && url.pathname === "/api/assets") {
@@ -396,6 +406,36 @@ async function handleApi(request: Request, url: URL) {
       role: roleValue(body.role, "user")!,
     });
     return json({ user }, 201);
+  }
+
+  const userChannelsMatch = url.pathname.match(
+    /^\/api\/admin\/users\/(\d+)\/channels$/,
+  );
+  if (userChannelsMatch && request.method === "GET") {
+    await requireAdmin(request);
+    const targetId = Number(userChannelsMatch[1]);
+    if (!(await findUserById(targetId)))
+      throw new HttpError(404, "用户不存在");
+    return json(await getUserChannelAssignment(targetId));
+  }
+
+  if (userChannelsMatch && request.method === "PUT") {
+    const current = await requireAdmin(request);
+    const targetId = Number(userChannelsMatch[1]);
+    if (!(await findUserById(targetId)))
+      throw new HttpError(404, "用户不存在");
+    const body = await readJson(request);
+    return json(
+      await saveUserChannelAssignment(
+        targetId,
+        {
+          allChannels: body.allChannels,
+          channelIds: body.channelIds,
+          expectedVersion: body.expectedVersion,
+        },
+        current.id,
+      ),
+    );
   }
 
   const userMatch = url.pathname.match(/^\/api\/admin\/users\/(\d+)$/);

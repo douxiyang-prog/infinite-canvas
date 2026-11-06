@@ -4,6 +4,7 @@ import { App } from "antd";
 import { useTranslation } from "react-i18next";
 
 import { useConfigStore } from "@/stores/use-config-store";
+import { useUserStore } from "@/stores/use-user-store";
 import { usePromptSourceScheduler } from "@/hooks/use-prompt-source-scheduler";
 
 export function ClientRootInit({ children }: { children: ReactNode }) {
@@ -11,10 +12,24 @@ export function ClientRootInit({ children }: { children: ReactNode }) {
     const { i18n, t } = useTranslation();
     const handledConfigParams = useRef(false);
     const shownConflicts = useRef(new Set<string>());
+    const lastSessionReplacementAt = useRef(0);
+    const user = useUserStore((state) => state.user);
+    const configHydrated = useConfigStore((state) => state.hydrated);
     const importChannelCredentials = useConfigStore((state) => state.importChannelCredentials);
     const openConfigDialog = useConfigStore((state) => state.openConfigDialog);
 
     usePromptSourceScheduler();
+
+    useEffect(() => {
+        const handleSessionReplaced = () => {
+            if (Date.now() - lastSessionReplacementAt.current < 1000) return;
+            lastSessionReplacementAt.current = Date.now();
+            useUserStore.getState().clearSession();
+            message.warning(i18n.resolvedLanguage === "en-US" ? "This account was signed in elsewhere. The current session has expired." : "该账号已在其他设备登录，当前会话已失效，请重新登录。");
+        };
+        window.addEventListener("session-replaced", handleSessionReplaced);
+        return () => window.removeEventListener("session-replaced", handleSessionReplaced);
+    }, [i18n.resolvedLanguage, message]);
 
     useEffect(() => {
         const handleStorageError = (event: Event) => {
@@ -48,7 +63,7 @@ export function ClientRootInit({ children }: { children: ReactNode }) {
     }, [i18n.resolvedLanguage, modal]);
 
     useEffect(() => {
-        if (handledConfigParams.current) return;
+        if (handledConfigParams.current || !configHydrated || user?.role !== "admin") return;
         const searchParams = new URLSearchParams(window.location.search);
         const baseUrl = searchParams.get("baseUrl") || searchParams.get("baseurl");
         const apiKey = searchParams.get("apiKey") || searchParams.get("apikey");
@@ -65,7 +80,7 @@ export function ClientRootInit({ children }: { children: ReactNode }) {
         else if (result.status === "updated") message.success(t("config.importedChannelUpdated", { name: result.channelName }));
         else if (result.status === "missing-base-url") message.error(t("config.importedChannelBaseUrlRequired"));
         else message.error(t("config.importedChannelBaseUrlInvalid"));
-    }, [importChannelCredentials, message, openConfigDialog, t]);
+    }, [configHydrated, importChannelCredentials, message, openConfigDialog, t, user?.role]);
 
     return <>{children}</>;
 }

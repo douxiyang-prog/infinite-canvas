@@ -10,6 +10,8 @@ set -Eeuo pipefail
 #   CANVAS_BUILD_ROOT=/tmp/infinite-canvas-builds
 #   CANVAS_PUBLIC_BASE_URL_OVERRIDE=http://example.com:12345
 #   CANVAS_NO_CACHE=1
+#   CANVAS_APP_DOCKERFILE=Dockerfile
+#   CANVAS_API_DOCKERFILE=server/Dockerfile
 
 UPDATE_TAR="${1:-${CANVAS_UPDATE_TAR:-}}"
 DEPLOY_DIR="${CANVAS_DEPLOY_DIR:-/opt/infinite-canvas-deploy}"
@@ -21,6 +23,8 @@ HEALTH_URL="${CANVAS_HEALTH_URL:-http://127.0.0.1:3000/api/health}"
 FRONTEND_MARKER="${CANVAS_FRONTEND_MARKER:-reference_video}"
 API_MARKER="${CANVAS_API_MARKER:-CANVAS_PUBLIC_BASE_URL}"
 NO_CACHE="${CANVAS_NO_CACHE:-1}"
+APP_DOCKERFILE="${CANVAS_APP_DOCKERFILE:-Dockerfile}"
+API_DOCKERFILE="${CANVAS_API_DOCKERFILE:-server/Dockerfile}"
 STAMP="$(date +%Y%m%d-%H%M%S)"
 
 log() {
@@ -78,14 +82,14 @@ else
 fi
 
 tar_members="$(tar -tf "$UPDATE_TAR")"
-if printf '%s\n' "$tar_members" | grep -Eq '(^/|(^|/)\.\./)'; then
+if grep -Eq '(^/|(^|/)\.\./)' <<< "$tar_members"; then
   die "更新包包含不安全路径"
 fi
 for required in \
   "infinite-canvas/Dockerfile" \
   "infinite-canvas/web/package.json" \
   "infinite-canvas/server/Dockerfile"; do
-  printf '%s\n' "$tar_members" | grep -qx "$required" ||
+  grep -Fx "$required" <<< "$tar_members" >/dev/null ||
     die "更新包不是完整构建源码，缺少：$required"
 done
 
@@ -193,12 +197,12 @@ fi
 log "构建前端镜像 ${APP_REPO}:latest"
 "${DOCKER[@]}" "${build_args[@]}" \
   -t "${APP_REPO}:latest" \
-  -f Dockerfile .
+  -f "$APP_DOCKERFILE" .
 
 log "构建 API 镜像 ${API_REPO}:latest"
 "${DOCKER[@]}" "${build_args[@]}" \
   -t "${API_REPO}:latest" \
-  -f server/Dockerfile ./server
+  -f "$API_DOCKERFILE" ./server
 
 log "验证新镜像包含必要代码"
 "${DOCKER[@]}" run --rm -e "MARKER=$FRONTEND_MARKER" --entrypoint sh "${APP_REPO}:latest" \

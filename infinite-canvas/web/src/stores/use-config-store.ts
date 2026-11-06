@@ -1,6 +1,5 @@
 import { useMemo } from "react";
 import { create } from "zustand";
-import { persist } from "zustand/middleware";
 import { nanoid } from "nanoid";
 
 import i18n from "@/i18n";
@@ -136,6 +135,7 @@ export const defaultWebdavSyncConfig: WebdavSyncConfig = {
 };
 
 type ConfigStore = {
+    hydrated: boolean;
     config: AiConfig;
     webdav: WebdavSyncConfig;
     isConfigOpen: boolean;
@@ -145,6 +145,8 @@ type ConfigStore = {
     importChannelCredentials: (input: { baseUrl?: string | null; apiKey?: string | null }) => ChannelCredentialsImportResult;
     updateWebdavConfig: <K extends keyof WebdavSyncConfig>(key: K, value: WebdavSyncConfig[K]) => void;
     applyGlobalConfig: (config: Partial<AiConfig>, webdav: Partial<WebdavSyncConfig>) => void;
+    resetConfigForSession: () => void;
+    setConfigHydrated: (hydrated: boolean) => void;
     isAiConfigReady: (config: AiConfig, model: string) => boolean;
     openConfigDialog: (shouldPromptContinue?: boolean, tab?: ConfigTabKey) => void;
     setConfigDialogOpen: (isOpen: boolean) => void;
@@ -255,8 +257,8 @@ function normalizeGlobalConfig(
 }
 
 export const useConfigStore = create<ConfigStore>()(
-    persist(
-        (set, get) => ({
+    (set, get) => ({
+            hydrated: false,
             config: defaultConfig,
             webdav: defaultWebdavSyncConfig,
             isConfigOpen: false,
@@ -282,24 +284,25 @@ export const useConfigStore = create<ConfigStore>()(
                         [key]: value,
                     },
                 })),
-            applyGlobalConfig: (config, webdav) => set(normalizeGlobalConfig(config, webdav)),
+            applyGlobalConfig: (config, webdav) => set({ ...normalizeGlobalConfig(config, webdav), hydrated: true }),
+            resetConfigForSession: () =>
+                set({
+                    hydrated: false,
+                    config: {
+                        ...defaultConfig,
+                        channels: defaultConfig.channels.map((channel) => ({
+                            ...channel,
+                            models: channel.models.map((model) => ({ ...model })),
+                        })),
+                    },
+                    webdav: { ...defaultWebdavSyncConfig },
+                }),
+            setConfigHydrated: (hydrated) => set({ hydrated }),
             isAiConfigReady: (config, model) => isAiConfigReady(config, model),
             openConfigDialog: (shouldPromptContinue = false, configTab = "channels") => set({ isConfigOpen: true, shouldPromptContinue, configTab }),
             setConfigDialogOpen: (isConfigOpen) => set({ isConfigOpen }),
             clearPromptContinue: () => set({ shouldPromptContinue: false }),
         }),
-        {
-            name: CONFIG_STORE_KEY,
-            partialize: (state) => ({ config: state.config, webdav: state.webdav }),
-            merge: (persisted, current) => {
-                const persistedState = (persisted || {}) as Partial<ConfigStore>;
-                return {
-                    ...current,
-                    ...normalizeGlobalConfig(persistedState.config, persistedState.webdav),
-                };
-            },
-        },
-    ),
 );
 
 export function useEffectiveConfig() {

@@ -22,7 +22,11 @@ export const db = mysql.createPool({
 });
 
 export async function migrate() {
-  for (const migration of ["001_users.sql", "002_storage.sql"]) {
+  for (const migration of [
+    "001_users.sql",
+    "002_storage.sql",
+    "003_user_channels.sql",
+  ]) {
     const schema = await Bun.file(
       new URL(`../sql/${migration}`, import.meta.url),
     ).text();
