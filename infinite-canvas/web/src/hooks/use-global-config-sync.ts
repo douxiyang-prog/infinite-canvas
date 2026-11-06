@@ -26,31 +26,40 @@ export function useGlobalConfigSync() {
 
         const applySnapshot = (snapshot: GlobalConfigResponse) => {
             version = snapshot.version;
-            useConfigStore.getState().applyGlobalConfig(snapshot.config || {
-                channels: [],
-            }, snapshot.webdav || {});
+            useConfigStore.getState().applyGlobalConfig(
+                snapshot.config || {
+                    channels: [],
+                },
+                snapshot.webdav || {},
+            );
             if (snapshot.promptSources) {
-                usePromptSourceStore.getState().applyGlobalConfig(
-                    snapshot.promptSources.sources || [],
-                    snapshot.promptSources.schedule || {},
-                );
+                usePromptSourceStore.getState().applyGlobalConfig(snapshot.promptSources.sources || [], snapshot.promptSources.schedule || {});
             }
         };
 
         if (user.role !== "admin") {
-            fetchUserConfig()
-                .then((snapshot) => {
-                    if (!active) return;
-                    applySnapshot(snapshot);
-                })
-                .catch((error) => {
-                    if (!active) return;
-                    const description = error instanceof Error ? error.message : String(error);
-                    useConfigStore.getState().setConfigHydrated(true);
-                    message.error(english ? `Could not load account channels: ${description}` : `账号渠道加载失败：${description}`);
-                });
+            const refresh = () =>
+                fetchUserConfig()
+                    .then((snapshot) => {
+                        if (!active) return;
+                        applySnapshot(snapshot);
+                    })
+                    .catch((error) => {
+                        if (!active) return;
+                        const description = error instanceof Error ? error.message : String(error);
+                        useConfigStore.getState().setConfigHydrated(true);
+                        message.error(english ? `Could not load account channels: ${description}` : `账号渠道加载失败：${description}`);
+                    });
+            const refreshOnFocus = () => {
+                if (document.visibilityState === "visible") void refresh();
+            };
+            void refresh();
+            window.addEventListener("focus", refreshOnFocus);
+            document.addEventListener("visibilitychange", refreshOnFocus);
             return () => {
                 active = false;
+                window.removeEventListener("focus", refreshOnFocus);
+                document.removeEventListener("visibilitychange", refreshOnFocus);
             };
         }
 
@@ -104,14 +113,14 @@ export function useGlobalConfigSync() {
             .then((snapshot) => {
                 if (!active) return;
                 version = snapshot.version;
-                useConfigStore.getState().applyGlobalConfig(snapshot.config || {
-                    channels: [],
-                }, snapshot.webdav || {});
+                useConfigStore.getState().applyGlobalConfig(
+                    snapshot.config || {
+                        channels: [],
+                    },
+                    snapshot.webdav || {},
+                );
                 if (snapshot.promptSources) {
-                    usePromptSourceStore.getState().applyGlobalConfig(
-                        snapshot.promptSources.sources || [],
-                        snapshot.promptSources.schedule || {},
-                    );
+                    usePromptSourceStore.getState().applyGlobalConfig(snapshot.promptSources.sources || [], snapshot.promptSources.schedule || {});
                 }
                 ready = true;
                 if ((!snapshot.config || !snapshot.promptSources) && user.role === "admin") scheduleSave(0);

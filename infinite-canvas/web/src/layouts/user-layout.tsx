@@ -29,7 +29,9 @@ export default function UserLayout({ children }: { children: ReactNode }) {
             <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
                 <AppTopNav />
                 <div className="min-h-0 flex-1 overflow-hidden">
-                    {configHydrated ? children : (
+                    {configHydrated ? (
+                        children
+                    ) : (
                         <div className="flex h-full items-center justify-center bg-background">
                             <Spin size="large" />
                         </div>

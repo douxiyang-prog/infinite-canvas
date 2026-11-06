@@ -1,4 +1,4 @@
-import { KeyRound, Plus, Shield, UserRound } from "lucide-react";
+import { KeyRound, Plus, RadioTower, Shield, UserRound } from "lucide-react";
 import { useState } from "react";
 import { App, Button, Form, Input, Modal, Popconfirm, Select, Space, Table, Tag } from "antd";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -118,7 +118,7 @@ function AdminUsers() {
                         loading={isLoading}
                         dataSource={users}
                         pagination={false}
-                        scroll={{ x: 860 }}
+                        scroll={{ x: 980 }}
                         columns={[
                             {
                                 title: "用户",
@@ -173,9 +173,12 @@ function AdminUsers() {
                             {
                                 title: "操作",
                                 key: "actions",
-                                width: 180,
+                                width: 280,
                                 render: (_, user) => (
                                     <Space size={4}>
+                                        <Button type="link" size="small" icon={<RadioTower className="size-3.5" />} onClick={() => navigate(`/admin/user-channels?user=${user.id}`)}>
+                                            渠道配置
+                                        </Button>
                                         <Button type="link" size="small" icon={<KeyRound className="size-3.5" />} onClick={() => setPasswordUser(user)}>
                                             重置密码
                                         </Button>

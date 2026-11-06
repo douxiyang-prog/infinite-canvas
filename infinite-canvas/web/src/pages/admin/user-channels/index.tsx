@@ -2,7 +2,7 @@ import { CheckSquare, RadioTower, Save, Square, Users } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { App, Button, Checkbox, Empty, Input, Spin, Switch, Tag } from "antd";
 import { useQuery } from "@tanstack/react-query";
-import { Navigate } from "react-router-dom";
+import { Navigate, useSearchParams } from "react-router-dom";
 
 import { fetchUsers } from "@/services/api/users";
 import { fetchUserChannelConfig, saveUserChannelConfig } from "@/services/api/user-channels";
@@ -18,8 +18,9 @@ export default function AdminUserChannelsPage() {
 
 function AdminUserChannels() {
     const { message } = App.useApp();
+    const [searchParams] = useSearchParams();
     const [keyword, setKeyword] = useState("");
-    const [selectedUserId, setSelectedUserId] = useState<number | null>(null);
+    const [selectedUserId, setSelectedUserId] = useState<number | null>(() => Number(searchParams.get("user")) || null);
     const [allChannels, setAllChannels] = useState(true);
     const [channelIds, setChannelIds] = useState<string[]>([]);
     const [version, setVersion] = useState(0);
@@ -35,7 +36,7 @@ function AdminUserChannels() {
 
     useEffect(() => {
         if (selectedUserId || !users.length) return;
-        setSelectedUserId(users[0].id);
+        setSelectedUserId((users.find((user) => user.role === "user") || users[0]).id);
     }, [selectedUserId, users]);
 
     useEffect(() => {
@@ -52,6 +53,8 @@ function AdminUserChannels() {
     }, [keyword, users]);
     const channels = configQuery.data?.channels || [];
     const selectedChannels = new Set(channelIds);
+    const targetIsAdmin = selectedUser?.role === "admin";
+    const usesAllChannels = allChannels || targetIsAdmin;
 
     const save = async () => {
         if (!selectedUser) return;
@@ -88,7 +91,11 @@ function AdminUserChannels() {
                     <aside className="border-b border-stone-200 bg-stone-50 p-3 md:border-b-0 md:border-r dark:border-stone-800 dark:bg-stone-900/40">
                         <Input allowClear placeholder="搜索用户" value={keyword} onChange={(event) => setKeyword(event.target.value)} />
                         <div className="mt-3 space-y-1">
-                            {usersQuery.isLoading ? <div className="flex justify-center py-10"><Spin size="small" /></div> : null}
+                            {usersQuery.isLoading ? (
+                                <div className="flex justify-center py-10">
+                                    <Spin size="small" />
+                                </div>
+                            ) : null}
                             {filteredUsers.map((user) => (
                                 <UserButton key={user.id} user={user} active={user.id === selectedUserId} onClick={() => setSelectedUserId(user.id)} />
                             ))}
@@ -102,61 +109,84 @@ function AdminUserChannels() {
                                 <div className="flex flex-wrap items-start justify-between gap-4 border-b border-stone-200 pb-5 dark:border-stone-800">
                                     <div>
                                         <h2 className="text-base font-semibold">{selectedUser.displayName}</h2>
-                                        <p className="mt-1 text-xs text-stone-500">@{selectedUser.username} · {selectedUser.role === "admin" ? "管理员" : "普通用户"}</p>
+                                        <p className="mt-1 text-xs text-stone-500">
+                                            @{selectedUser.username} · {selectedUser.role === "admin" ? "管理员" : "普通用户"}
+                                        </p>
                                     </div>
-                                    <Button type="primary" icon={<Save className="size-4" />} loading={saving} disabled={configQuery.isLoading} onClick={() => void save()}>
+                                    <Button type="primary" icon={<Save className="size-4" />} loading={saving} disabled={configQuery.isLoading || targetIsAdmin} onClick={() => void save()}>
                                         保存配置
                                     </Button>
                                 </div>
 
                                 {configQuery.isLoading ? (
-                                    <div className="flex min-h-80 items-center justify-center"><Spin /></div>
+                                    <div className="flex min-h-80 items-center justify-center">
+                                        <Spin />
+                                    </div>
                                 ) : configQuery.isError ? (
                                     <div className="py-16 text-center text-sm text-red-500">{configQuery.error instanceof Error ? configQuery.error.message : "读取渠道配置失败"}</div>
                                 ) : (
                                     <div className="pt-5">
+                                        {targetIsAdmin ? (
+                                            <div className="mb-4 rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-xs text-blue-700 dark:border-blue-900 dark:bg-blue-950/30 dark:text-blue-300">管理员始终使用全部全局渠道，无需单独分配。</div>
+                                        ) : null}
                                         <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-stone-200 p-4 dark:border-stone-800">
                                             <div>
                                                 <div className="text-sm font-medium">允许全部渠道</div>
                                                 <div className="mt-1 text-xs text-stone-500">开启后自动包含以后新增的全局渠道。</div>
                                             </div>
-                                            <Switch checked={allChannels} checkedChildren="全选" unCheckedChildren="自定义" onChange={setAllChannels} />
+                                            <Switch checked={usesAllChannels} disabled={targetIsAdmin} checkedChildren="全选" unCheckedChildren="自定义" onChange={setAllChannels} />
                                         </div>
 
                                         <div className="mt-5 flex flex-wrap items-center justify-between gap-3">
                                             <div>
                                                 <div className="text-sm font-medium">可用渠道</div>
-                                                <div className="mt-1 text-xs text-stone-500">已选择 {allChannels ? channels.length : channelIds.length} / {channels.length}</div>
+                                                <div className="mt-1 text-xs text-stone-500">
+                                                    已选择 {usesAllChannels ? channels.length : channelIds.length} / {channels.length}
+                                                </div>
                                             </div>
                                             <div className="flex gap-2">
-                                                <Button size="small" icon={<CheckSquare className="size-3.5" />} disabled={allChannels || !channels.length} onClick={() => setChannelIds(channels.map((channel) => channel.id))}>全选</Button>
-                                                <Button size="small" icon={<Square className="size-3.5" />} disabled={allChannels || !channelIds.length} onClick={() => setChannelIds([])}>清空</Button>
+                                                <Button size="small" icon={<CheckSquare className="size-3.5" />} disabled={usesAllChannels || !channels.length} onClick={() => setChannelIds(channels.map((channel) => channel.id))}>
+                                                    全选
+                                                </Button>
+                                                <Button size="small" icon={<Square className="size-3.5" />} disabled={usesAllChannels || !channelIds.length} onClick={() => setChannelIds([])}>
+                                                    清空
+                                                </Button>
                                             </div>
                                         </div>
 
-                                        <div className={cn("mt-3 grid gap-3", allChannels && "opacity-55")}>
-                                            {channels.length ? channels.map((channel) => (
-                                                <label key={channel.id} className="flex cursor-pointer items-start gap-3 rounded-lg border border-stone-200 p-4 transition hover:bg-stone-50 dark:border-stone-800 dark:hover:bg-stone-900/50">
-                                                    <Checkbox
-                                                        checked={allChannels || selectedChannels.has(channel.id)}
-                                                        disabled={allChannels}
-                                                        onChange={(event) => setChannelIds((current) => event.target.checked ? [...new Set([...current, channel.id])] : current.filter((id) => id !== channel.id))}
-                                                    />
-                                                    <span className="min-w-0 flex-1">
-                                                        <span className="block text-sm font-medium">{channel.name}</span>
-                                                        <span className="mt-2 flex flex-wrap gap-1">
-                                                            {Array.from(new Set(channel.models.map((model) => model.capability))).map((capability) => <Tag key={capability} className="m-0">{capability}</Tag>)}
-                                                            <Tag className="m-0">{channel.models.length} 个模型</Tag>
+                                        <div className={cn("mt-3 grid gap-3", usesAllChannels && "opacity-55")}>
+                                            {channels.length ? (
+                                                channels.map((channel) => (
+                                                    <label key={channel.id} className="flex cursor-pointer items-start gap-3 rounded-lg border border-stone-200 p-4 transition hover:bg-stone-50 dark:border-stone-800 dark:hover:bg-stone-900/50">
+                                                        <Checkbox
+                                                            checked={usesAllChannels || selectedChannels.has(channel.id)}
+                                                            disabled={usesAllChannels}
+                                                            onChange={(event) => setChannelIds((current) => (event.target.checked ? [...new Set([...current, channel.id])] : current.filter((id) => id !== channel.id)))}
+                                                        />
+                                                        <span className="min-w-0 flex-1">
+                                                            <span className="block text-sm font-medium">{channel.name}</span>
+                                                            <span className="mt-2 flex flex-wrap gap-1">
+                                                                {Array.from(new Set(channel.models.map((model) => model.capability))).map((capability) => (
+                                                                    <Tag key={capability} className="m-0">
+                                                                        {capability}
+                                                                    </Tag>
+                                                                ))}
+                                                                <Tag className="m-0">{channel.models.length} 个模型</Tag>
+                                                            </span>
                                                         </span>
-                                                    </span>
-                                                </label>
-                                            )) : <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="全局管理中还没有渠道" className="py-12" />}
+                                                    </label>
+                                                ))
+                                            ) : (
+                                                <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="全局管理中还没有渠道" className="py-12" />
+                                            )}
                                         </div>
                                     </div>
                                 )}
                             </>
                         ) : (
-                            <div className="flex min-h-80 items-center justify-center"><Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="请选择用户" /></div>
+                            <div className="flex min-h-80 items-center justify-center">
+                                <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="请选择用户" />
+                            </div>
                         )}
                     </div>
                 </section>

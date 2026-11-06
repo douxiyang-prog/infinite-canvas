@@ -189,7 +189,6 @@ export function modelMatchesCapability(config: AiConfig, value: string, capabili
 
 export function resolveModelForCapability(config: AiConfig, currentModel: string | undefined, capability: ModelCapability) {
     const defaultModel = capability === "image" ? config.imageModel : capability === "video" ? config.videoModel : capability === "audio" ? config.audioModel : config.textModel;
-    const fallbackModel = capability === "image" ? defaultConfig.imageModel : capability === "video" ? defaultConfig.videoModel : capability === "audio" ? defaultConfig.audioModel : defaultConfig.textModel;
     for (const model of [currentModel, defaultModel]) {
         if (!model) continue;
         const configuredCapability = modelCapabilityOf(config, model);
@@ -197,7 +196,7 @@ export function resolveModelForCapability(config: AiConfig, currentModel: string
         // request. Only a known capability switch may choose another model.
         if (!configuredCapability || configuredCapability === capability) return model;
     }
-    return fallbackModel;
+    return selectableModelsByCapability(config, capability)[0] || "";
 }
 
 export function selectableModelsByCapability(config: AiConfig, capability?: ModelCapability) {
@@ -215,10 +214,7 @@ function isAiConfigReady(config: AiConfig, model: string) {
     return Boolean(match && match.channel.baseUrl.trim() && match.channel.apiKey.trim());
 }
 
-function normalizeGlobalConfig(
-    persistedConfigInput: Partial<AiConfig> | null | undefined,
-    persistedWebdavInput: Partial<WebdavSyncConfig> | null | undefined,
-): { config: AiConfig; webdav: WebdavSyncConfig } {
+function normalizeGlobalConfig(persistedConfigInput: Partial<AiConfig> | null | undefined, persistedWebdavInput: Partial<WebdavSyncConfig> | null | undefined): { config: AiConfig; webdav: WebdavSyncConfig } {
     const persistedConfig = persistedConfigInput || {};
     const persistedWebdav = persistedWebdavInput || {};
     const config = { ...defaultConfig, ...persistedConfig };
@@ -256,54 +252,55 @@ function normalizeGlobalConfig(
     };
 }
 
-export const useConfigStore = create<ConfigStore>()(
-    (set, get) => ({
-            hydrated: false,
-            config: defaultConfig,
-            webdav: defaultWebdavSyncConfig,
-            isConfigOpen: false,
-            configTab: "channels",
-            shouldPromptContinue: false,
-            updateConfig: (key, value) =>
-                set((state) => ({
-                    config: {
-                        ...state.config,
-                        [key]: value,
-                    },
-                })),
-            importChannelCredentials: (input) => {
-                const currentConfig = get().config;
-                const result = upsertChannelCredentials(currentConfig, input);
-                if (result.config !== currentConfig) set({ config: result.config });
-                return { status: result.status, channelName: result.channelName };
+export const useConfigStore = create<ConfigStore>()((set, get) => ({
+    hydrated: false,
+    config: defaultConfig,
+    webdav: defaultWebdavSyncConfig,
+    isConfigOpen: false,
+    configTab: "channels",
+    shouldPromptContinue: false,
+    updateConfig: (key, value) =>
+        set((state) => ({
+            config: {
+                ...state.config,
+                [key]: value,
             },
-            updateWebdavConfig: (key, value) =>
-                set((state) => ({
-                    webdav: {
-                        ...state.webdav,
-                        [key]: value,
-                    },
-                })),
-            applyGlobalConfig: (config, webdav) => set({ ...normalizeGlobalConfig(config, webdav), hydrated: true }),
-            resetConfigForSession: () =>
-                set({
-                    hydrated: false,
-                    config: {
-                        ...defaultConfig,
-                        channels: defaultConfig.channels.map((channel) => ({
-                            ...channel,
-                            models: channel.models.map((model) => ({ ...model })),
-                        })),
-                    },
-                    webdav: { ...defaultWebdavSyncConfig },
-                }),
-            setConfigHydrated: (hydrated) => set({ hydrated }),
-            isAiConfigReady: (config, model) => isAiConfigReady(config, model),
-            openConfigDialog: (shouldPromptContinue = false, configTab = "channels") => set({ isConfigOpen: true, shouldPromptContinue, configTab }),
-            setConfigDialogOpen: (isConfigOpen) => set({ isConfigOpen }),
-            clearPromptContinue: () => set({ shouldPromptContinue: false }),
+        })),
+    importChannelCredentials: (input) => {
+        const currentConfig = get().config;
+        const result = upsertChannelCredentials(currentConfig, input);
+        if (result.config !== currentConfig) set({ config: result.config });
+        return { status: result.status, channelName: result.channelName };
+    },
+    updateWebdavConfig: (key, value) =>
+        set((state) => ({
+            webdav: {
+                ...state.webdav,
+                [key]: value,
+            },
+        })),
+    applyGlobalConfig: (config, webdav) => set({ ...normalizeGlobalConfig(config, webdav), hydrated: true }),
+    resetConfigForSession: () =>
+        set(() => {
+            if (typeof window !== "undefined") window.localStorage.removeItem(CONFIG_STORE_KEY);
+            return {
+                hydrated: false,
+                config: {
+                    ...defaultConfig,
+                    channels: defaultConfig.channels.map((channel) => ({
+                        ...channel,
+                        models: channel.models.map((model) => ({ ...model })),
+                    })),
+                },
+                webdav: { ...defaultWebdavSyncConfig },
+            };
         }),
-);
+    setConfigHydrated: (hydrated) => set({ hydrated }),
+    isAiConfigReady: (config, model) => isAiConfigReady(config, model),
+    openConfigDialog: (shouldPromptContinue = false, configTab = "channels") => set({ isConfigOpen: true, shouldPromptContinue, configTab }),
+    setConfigDialogOpen: (isConfigOpen) => set({ isConfigOpen }),
+    clearPromptContinue: () => set({ shouldPromptContinue: false }),
+}));
 
 export function useEffectiveConfig() {
     const config = useConfigStore((state) => state.config);
@@ -337,10 +334,7 @@ export function createModelChannel(channel?: Partial<ModelChannel>): ModelChanne
     };
 }
 
-export function upsertChannelCredentials(
-    config: AiConfig,
-    input: { baseUrl?: string | null; apiKey?: string | null },
-): ChannelCredentialsImportResult & { config: AiConfig } {
+export function upsertChannelCredentials(config: AiConfig, input: { baseUrl?: string | null; apiKey?: string | null }): ChannelCredentialsImportResult & { config: AiConfig } {
     const rawBaseUrl = input.baseUrl?.trim() || "";
     if (!rawBaseUrl) return { status: "missing-base-url", config };
     if (!isHttpBaseUrl(rawBaseUrl)) return { status: "invalid-base-url", config };
@@ -446,7 +440,18 @@ export function resolveModelChannel(config: AiConfig, value: string) {
     const decoded = decodeChannelModel(value);
     const model = decoded?.model || value;
     const matched = decoded ? config.channels.find((channel) => channel.id === decoded.channelId) : config.channels.find((channel) => channel.models.some((item) => item.name === model));
-    return matched || config.channels[0] || createModelChannel({ id: "default", name: i18n.t("config.channels.defaultName"), baseUrl: config.baseUrl, apiKey: config.apiKey, apiFormat: config.apiFormat, models: config.models.map(modelOptionName).map((name) => ({ name, capability: guessCapability(name) })) });
+    return (
+        matched ||
+        config.channels[0] ||
+        createModelChannel({
+            id: "default",
+            name: i18n.t("config.channels.defaultName"),
+            baseUrl: config.baseUrl,
+            apiKey: config.apiKey,
+            apiFormat: config.apiFormat,
+            models: config.models.map(modelOptionName).map((name) => ({ name, capability: guessCapability(name) })),
+        })
+    );
 }
 
 export function resolveModelRequestConfig(config: AiConfig, value: string) {

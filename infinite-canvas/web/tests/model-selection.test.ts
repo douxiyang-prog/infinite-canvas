@@ -84,6 +84,23 @@ test("switching generation capability still selects a model of the new capabilit
     expect(resolveModelForCapability(config, "replacement::image-a", "video")).toBe("replacement::video-b");
 });
 
+test("switching capability never falls back to a channel outside the assigned config", () => {
+    const assigned = {
+        ...config,
+        imageModel: "",
+        videoModel: "",
+        channels: [
+            {
+                ...config.channels[0],
+                id: "kling",
+                models: [{ name: "kling-video", capability: "video" as const }],
+            },
+        ],
+    };
+    expect(resolveModelForCapability(assigned, undefined, "video")).toBe("kling::kling-video");
+    expect(resolveModelForCapability(assigned, undefined, "image")).toBe("");
+});
+
 test("changing only the key on the same provider preserves the saved model and task", () => {
     const node = videoNode("replacement::video-a");
     const selected = buildGenerationConfig({ ...config, channels: [{ ...config.channels[0], apiKey: "rotated-key" }] }, node, "video");

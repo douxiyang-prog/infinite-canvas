@@ -14,6 +14,7 @@ description: 画布服务端存储、节点结构、媒体文件与清理机制
 - 画布项目 JSON：写入管理员配置的存储根目录，路径为 `users/<userId>/projects/<projectId>/project.json`；项目索引和版本保存在 MySQL 的 `canvas_projects`。
 - 我的资产 JSON：写入 `users/<userId>/assets/assets.json`，按登录用户隔离；新增、编辑和删除均等待服务端写入成功后再更新界面。
 - 图片和视频文件：通过 `/api/files` 写入存储根目录，文件索引保存在 MySQL 的 `canvas_files`。
+- 用户渠道权限：全局渠道配置保存在 `system_settings`；每个账号的渠道分配保存在 MySQL 的 `user_channel_assignments`，`all_channels=1` 表示自动包含当前及以后新增的全部渠道。
 - 浏览器 `localForage`：只保留缩略图缓存、生成记录和旧版资产迁移来源，不再作为画布或资产清单的唯一存储。
 
 旧版浏览器中的 `infinite-canvas:asset_store` 会在首次加载时自动导入当前登录账号的服务端资产文件，导入成功后删除旧键。
