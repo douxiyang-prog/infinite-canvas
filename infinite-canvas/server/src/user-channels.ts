@@ -139,7 +139,12 @@ export async function getEffectiveUserConfig(userId: number) {
   const config = {
     ...source,
     channelMode: "local",
+    baseUrl: "",
+    apiKey: "",
     channels: allowed,
+    models: allowed.flatMap((channel) =>
+      channel.models.map((model) => `${channel.id}::${model.name}`),
+    ),
     model: pickDefault(source.model, "image", allowed),
     imageModel: pickDefault(source.imageModel, "image", allowed),
     videoModel: pickDefault(source.videoModel, "video", allowed),
