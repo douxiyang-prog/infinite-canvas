@@ -125,6 +125,10 @@ export default {
         downloadImage: "下载图片",
         downloadVideo: "下载视频",
         downloadFailed: "下载失败，请稍后重试",
+        loadFailed: "资产加载失败",
+        saveFailed: "资产保存失败",
+        retry: "重试",
+        deleteFailed: "资产删除失败",
     },
     notFound: {
         title: "页面不存在",

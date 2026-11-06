@@ -54,6 +54,14 @@ import {
   getPublicFile,
   saveFile,
 } from "./files";
+import {
+  createAsset,
+  deleteAsset,
+  importAssets,
+  listAssets,
+  replaceAssets,
+  updateAsset,
+} from "./assets";
 import { purgeExpiredTrash, restoreProject } from "./trash";
 import { getGlobalConfig, saveGlobalConfig } from "./global-config";
 
@@ -168,6 +176,48 @@ async function handleApi(request: Request, url: URL) {
   if (request.method === "GET" && url.pathname === "/api/projects") {
     const user = await requireUser(request);
     return json(await listProjects(user.id));
+  }
+
+  if (request.method === "GET" && url.pathname === "/api/assets") {
+    const user = await requireUser(request);
+    return json(await listAssets(user.id));
+  }
+
+  if (request.method === "POST" && url.pathname === "/api/assets") {
+    const user = await requireUser(request);
+    const body = await readJson(request);
+    return json(await createAsset(user.id, body.asset), 201);
+  }
+
+  if (request.method === "PUT" && url.pathname === "/api/assets") {
+    const user = await requireUser(request);
+    const body = await readJson(request);
+    return json(await replaceAssets(user.id, body.assets));
+  }
+
+  if (
+    request.method === "POST" &&
+    url.pathname === "/api/assets/import"
+  ) {
+    const user = await requireUser(request);
+    const body = await readJson(request);
+    return json(await importAssets(user.id, body.assets));
+  }
+
+  const assetMatch = url.pathname.match(
+    /^\/api\/assets\/([A-Za-z0-9_-]+)$/,
+  );
+  if (assetMatch && request.method === "PUT") {
+    const user = await requireUser(request);
+    const body = await readJson(request);
+    return json(
+      await updateAsset(user.id, assetMatch[1], body.asset),
+    );
+  }
+
+  if (assetMatch && request.method === "DELETE") {
+    const user = await requireUser(request);
+    return json(await deleteAsset(user.id, assetMatch[1]));
   }
 
   const projectMatch = url.pathname.match(/^\/api\/projects\/([A-Za-z0-9_-]+)$/);

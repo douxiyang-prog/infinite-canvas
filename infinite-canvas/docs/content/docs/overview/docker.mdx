@@ -45,7 +45,7 @@ cd docs
 docker compose -f docker-compose.local.yml up -d --build
 ```
 
-The customized application provides the Vite frontend, Nginx, and an authentication API. User profiles, password hashes, and login sessions are stored in MySQL. Canvases, assets, generation history, and AI API keys remain browser-local until project storage moves to the NAS. Prompt sources are still fetched directly by the browser.
+The customized application provides the Vite frontend, Nginx, and an authentication API. User profiles, password hashes, login sessions, and canvas/file indexes are stored in MySQL. Canvas JSON, My Assets, and media files are written to the configured server storage directory. Generation history and AI API keys remain browser-local. Prompt sources are still fetched directly by the browser.
 
 ## Optional analytics
 

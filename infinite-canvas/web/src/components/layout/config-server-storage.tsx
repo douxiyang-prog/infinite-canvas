@@ -8,7 +8,7 @@ import { completeStorageSetup, fetchAdminStorageConfig, validateStorageSetup, ty
 const copy = {
     "zh-CN": {
         title: "服务端存储",
-        description: "配置画布 JSON 和媒体文件的落盘位置。目录会自动按 input/output 分类存储。",
+        description: "配置画布 JSON、我的资产和媒体文件的落盘位置。目录会自动按 input/output 分类存储。",
         path: "存储路径",
         pathPlaceholder: "/mnt/smb/infinite-canvas",
         allowedRoots: "允许的根目录",
@@ -30,7 +30,7 @@ const copy = {
     },
     "en-US": {
         title: "Server storage",
-        description: "Configure where canvas JSON and media files are stored. Each project uses input/output directories.",
+        description: "Configure where canvas JSON, My Assets, and media files are stored. Each project uses input/output directories.",
         path: "Storage path",
         pathPlaceholder: "/mnt/smb/infinite-canvas",
         allowedRoots: "Allowed roots",

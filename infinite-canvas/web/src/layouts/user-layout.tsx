@@ -6,6 +6,7 @@ import { AppSidebar } from "@/components/layout/app-sidebar";
 import { AppTopNav } from "@/components/layout/app-top-nav";
 import { useGlobalConfigSync } from "@/hooks/use-global-config-sync";
 import { prepareCanvasStoreForSession, useCanvasStore } from "@/stores/canvas/use-canvas-store";
+import { prepareAssetStoreForSession, useAssetStore } from "@/stores/use-asset-store";
 
 export default function UserLayout({ children }: { children: ReactNode }) {
     const bootstrapped = useRef(false);
@@ -14,7 +15,9 @@ export default function UserLayout({ children }: { children: ReactNode }) {
         if (bootstrapped.current) return;
         bootstrapped.current = true;
         prepareCanvasStoreForSession();
+        prepareAssetStoreForSession();
         void useCanvasStore.persist.rehydrate();
+        void useAssetStore.getState().loadAssets();
     }, []);
 
     return (

@@ -125,6 +125,10 @@ export default {
         downloadImage: "Download image",
         downloadVideo: "Download video",
         downloadFailed: "Download failed. Please try again.",
+        loadFailed: "Failed to load assets",
+        saveFailed: "Failed to save asset",
+        retry: "Retry",
+        deleteFailed: "Failed to delete asset",
     },
     notFound: {
         title: "Page not found",

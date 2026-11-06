@@ -57,7 +57,7 @@ docker compose -f docker-compose.local.yml up -d --build
 
 ## 数据说明
 
-当前自定义应用提供 Vite 前端、Nginx 和认证 API。用户资料、密码哈希和登录会话保存在 MySQL；画布、我的素材、生成记录和 AI API Key 仍默认保存在浏览器本地，后续版本再迁移到 NAS。第三方提示词仍由浏览器前端直连拉取。
+当前自定义应用提供 Vite 前端、Nginx 和认证 API。用户资料、密码哈希、登录会话、画布索引和文件索引保存在 MySQL；画布 JSON、我的资产和媒体文件写入管理员配置的服务端存储目录。生成记录和 AI API Key 仍默认保存在浏览器本地。第三方提示词仍由浏览器前端直连拉取。
 
 ## 统计分析（可选）
 

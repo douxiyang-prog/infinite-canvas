@@ -103,7 +103,9 @@ export async function syncAppDataToWebdav(config: WebdavSyncConfig, onProgress?:
             emptyData: { assets: [] },
             localData: async () => ({ assets: useAssetStore.getState().assets }),
             mergeData: (local, remote) => ({ assets: mergeById(local.assets, remote.assets, "updatedAt") }),
-            applyData: async (data) => useAssetStore.getState().replaceAssets(await Promise.all(data.assets.map(hydrateAsset))),
+            applyData: async (data) => {
+                await useAssetStore.getState().replaceAssets(await Promise.all(data.assets.map(hydrateAsset)));
+            },
         }),
         syncDomain<LogDomainData>(config, onProgress, {
             key: "image-workbench",

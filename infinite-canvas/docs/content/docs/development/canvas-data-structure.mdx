@@ -1,13 +1,15 @@
 ---
 title: Canvas Data Structure
-description: Local canvas storage, nodes, media files, and cleanup
+description: Server-backed canvas storage, nodes, media files, and cleanup
 ---
 
 # Canvas Data Structure
 
 ## Storage
 
-Canvas projects and My Assets are stored with localForage in the `infinite-canvas` database and `app_state` store. Image blobs use `image_files`; other media blobs use `media_files`. Project JSON stores display URLs, `storageKey`, and metadata rather than large base64 payloads.
+Canvas projects and My Assets are server-backed. Each project is written to `users/<userId>/projects/<projectId>/project.json`, and each user's asset catalog is written to `users/<userId>/assets/assets.json` under the configured storage root. MySQL stores project indexes and versions, while uploaded media is indexed in `canvas_files`.
+
+The frontend only keeps thumbnails, generation history, and legacy asset data in `localForage`. A legacy `infinite-canvas:asset_store` entry is imported into the signed-in user's server-side catalog and removed after a successful import.
 
 ## Project
 
@@ -50,7 +52,7 @@ type CanvasConnection = {
 
 Node positions and sizes use canvas-world coordinates. Edges store only node IDs; their paths are calculated while rendering. Deleting a node removes its connected edges.
 
-Common metadata includes content, prompt, status, generation mode, model, size, count, natural dimensions, image results, input order, `storageKey`, MIME type, byte size, and for in-progress OpenAI-style videos a `videoTaskId` used to resume status polling after refresh. A multi-image generation remains one image node: `images` creates all requested slots before generation starts and records each slot's `status`, `errorDetails`, and completed image data. `primaryImageId` selects the result mirrored by the node-level `content` and image metadata; the first successful slot becomes primary immediately. Persisted image and video `content` values are normally session-scoped `blob:` URLs, with `storageKey` as the persistent identity. If CORS prevents reading an otherwise displayable image, `content` may remain a potentially expiring remote URL and `storageKey` is omitted.
+Common metadata includes content, prompt, status, generation mode, model, size, count, natural dimensions, image results, input order, `storageKey`, MIME type, byte size, and for in-progress OpenAI-style videos a `videoTaskId` used to resume status polling after refresh. A multi-image generation remains one image node: `images` creates all requested slots before generation starts and records each slot's `status`, `errorDetails`, and completed image data. `primaryImageId` selects the result mirrored by the node-level `content` and image metadata; the first successful slot becomes primary immediately. Persisted image and video `content` values use `/api/files/...` URLs, with `storageKey` as the persistent media identity.
 
 ## Assistant sessions
 
@@ -68,6 +70,6 @@ Message references and generated images use the same blob-storage rules. They ar
 
 ## Media lifecycle
 
-`uploadImage()` accepts a Blob, data URL, or remote URL. It downloads remote data once, verifies that the Blob decodes as an image, stores it in `image_files` under an `image:<id>` key, and returns an in-memory object URL plus metadata. If CORS blocks byte access but the browser can still display the remote image, it returns that URL without a storage key. Opening a project resolves each stored key into a fresh object URL.
+`uploadImage()` accepts a Blob, data URL, or remote URL. It downloads remote data once, verifies that the Blob decodes as an image, uploads it through `/api/files` under an `image:<id>` key, and returns the server file URL plus metadata. If CORS blocks byte access but the browser can still display the remote image, it returns that URL without a storage key.
 
-Cleanup is reference-based. After deleting nodes, canvases, assets, or assistant sessions, the application collects every still-referenced storage key, removes unreferenced blobs, revokes their object URLs, and removes them from the in-memory cache. This prevents deleting a file still shared by another canvas feature.
+Deleting an asset removes its entry from the server-side asset catalog without deleting media that may still be shared by a canvas or generation history. Physical media cleanup is owned by server-side garbage collection.

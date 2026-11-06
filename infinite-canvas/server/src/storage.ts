@@ -101,6 +101,25 @@ async function readStoredSettings() {
   return publicSettings(rows[0]?.setting_value);
 }
 
+async function hasStoredAssets(root: string) {
+  let users;
+  try {
+    users = await readdir(join(root, "users"), { withFileTypes: true });
+  } catch (error) {
+    return (error as NodeJS.ErrnoException).code !== "ENOENT";
+  }
+  for (const user of users) {
+    if (!user.isDirectory()) continue;
+    try {
+      const files = await readdir(join(root, "users", user.name, "assets"));
+      if (files.includes("assets.json")) return true;
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") return true;
+    }
+  }
+  return false;
+}
+
 function isWithin(base: string, target: string) {
   const result = relative(base, target);
   return (
@@ -370,9 +389,14 @@ export async function initializeStorage(
     if (Number(rows[0]?.count || 0) > 0) {
       throw new HttpError(
         409,
-        "已有画布数据，不能直接更换存储路径，请使用存储迁移功能",
+        "已有画布或资产数据，不能直接更换存储路径，请使用存储迁移功能",
       );
     }
+    if (await hasStoredAssets(existing.root))
+      throw new HttpError(
+        409,
+        "已有资产数据，不能直接更换存储路径，请使用存储迁移功能",
+      );
   }
 
   await mkdir(validation.path, { recursive: true });
