@@ -1,12 +1,13 @@
 import { KeyRound, Plus, RadioTower, Shield, UserRound } from "lucide-react";
 import { useState } from "react";
-import { App, Button, Form, Input, Modal, Popconfirm, Select, Space, Table, Tag } from "antd";
+import { App, Button, Form, Input, Modal, Popconfirm, Select, Space, Table, Tabs, Tag } from "antd";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Navigate, useNavigate } from "react-router-dom";
 
 import { createManagedUser, fetchUsers, updateManagedUser } from "@/services/api/users";
 import { useUserStore } from "@/stores/use-user-store";
 import type { AuthUser, UserRole } from "@/types/user";
+import { AdminProjectManagement } from "@/pages/admin/users/project-management";
 
 type CreateValues = {
     username: string;
@@ -34,6 +35,7 @@ function AdminUsers() {
     const [createForm] = Form.useForm<CreateValues>();
     const [passwordForm] = Form.useForm<PasswordValues>();
     const [createOpen, setCreateOpen] = useState(false);
+    const [activeTab, setActiveTab] = useState("users");
     const [createSubmitting, setCreateSubmitting] = useState(false);
     const [passwordSubmitting, setPasswordSubmitting] = useState(false);
     const [passwordUser, setPasswordUser] = useState<AuthUser | null>(null);
@@ -107,97 +109,118 @@ function AdminUsers() {
                         </h1>
                         <p className="mt-1 text-sm text-stone-500">管理可登录无限画布的账号、角色和状态。</p>
                     </div>
-                    <Button type="primary" icon={<Plus className="size-4" />} onClick={() => setCreateOpen(true)}>
-                        新增用户
-                    </Button>
+                    {activeTab === "users" ? (
+                        <Button type="primary" icon={<Plus className="size-4" />} onClick={() => setCreateOpen(true)}>
+                            新增用户
+                        </Button>
+                    ) : null}
                 </div>
 
-                <div className="overflow-hidden rounded-xl border border-stone-200 bg-background dark:border-stone-800">
-                    <Table<AuthUser>
-                        rowKey="id"
-                        loading={isLoading}
-                        dataSource={users}
-                        pagination={false}
-                        scroll={{ x: 980 }}
-                        columns={[
-                            {
-                                title: "用户",
-                                key: "user",
-                                width: 210,
-                                render: (_, user) => (
-                                    <div className="flex items-center gap-3">
-                                        <span className="grid size-8 place-items-center rounded-full bg-stone-100 text-xs font-semibold text-stone-700 dark:bg-stone-800 dark:text-stone-200">{user.displayName.slice(0, 1).toUpperCase()}</span>
-                                        <div className="min-w-0">
-                                            <div className="truncate font-medium">{user.displayName}</div>
-                                            <div className="truncate text-xs text-stone-500">@{user.username}</div>
-                                        </div>
-                                    </div>
-                                ),
-                            },
-                            {
-                                title: "角色",
-                                dataIndex: "role",
-                                width: 130,
-                                render: (role: UserRole, user) => (
-                                    <Select<UserRole>
-                                        size="small"
-                                        value={role}
-                                        disabled={user.id === currentUser?.id}
-                                        className="w-24"
-                                        options={[
-                                            { value: "user", label: "用户" },
-                                            { value: "admin", label: "管理员" },
+                <Tabs
+                    activeKey={activeTab}
+                    onChange={setActiveTab}
+                    items={[
+                        {
+                            key: "users",
+                            label: "用户列表",
+                            children: (
+                                <div className="overflow-hidden rounded-xl border border-stone-200 bg-background dark:border-stone-800">
+                                    <Table<AuthUser>
+                                        rowKey="id"
+                                        loading={isLoading}
+                                        dataSource={users}
+                                        pagination={false}
+                                        scroll={{ x: 980 }}
+                                        columns={[
+                                            {
+                                                title: "用户",
+                                                key: "user",
+                                                width: 210,
+                                                render: (_, user) => (
+                                                    <div className="flex items-center gap-3">
+                                                        <span className="grid size-8 place-items-center rounded-full bg-stone-100 text-xs font-semibold text-stone-700 dark:bg-stone-800 dark:text-stone-200">
+                                                            {user.displayName.slice(0, 1).toUpperCase()}
+                                                        </span>
+                                                        <div className="min-w-0">
+                                                            <div className="truncate font-medium">{user.displayName}</div>
+                                                            <div className="truncate text-xs text-stone-500">@{user.username}</div>
+                                                        </div>
+                                                    </div>
+                                                ),
+                                            },
+                                            {
+                                                title: "角色",
+                                                dataIndex: "role",
+                                                width: 130,
+                                                render: (role: UserRole, user) => (
+                                                    <Select<UserRole>
+                                                        size="small"
+                                                        value={role}
+                                                        disabled={user.id === currentUser?.id}
+                                                        className="w-24"
+                                                        options={[
+                                                            { value: "user", label: "用户" },
+                                                            { value: "admin", label: "管理员" },
+                                                        ]}
+                                                        onChange={(value) => void changeRole(user, value)}
+                                                    />
+                                                ),
+                                            },
+                                            {
+                                                title: "状态",
+                                                dataIndex: "status",
+                                                width: 100,
+                                                render: (status: AuthUser["status"]) => <Tag color={status === "active" ? "green" : "default"}>{status === "active" ? "启用" : "停用"}</Tag>,
+                                            },
+                                            {
+                                                title: "最近登录",
+                                                dataIndex: "lastLoginAt",
+                                                width: 180,
+                                                render: (value: string | null) => (value ? new Date(value).toLocaleString() : "从未登录"),
+                                            },
+                                            {
+                                                title: "创建时间",
+                                                dataIndex: "createdAt",
+                                                width: 180,
+                                                render: (value: string) => new Date(value).toLocaleString(),
+                                            },
+                                            {
+                                                title: "操作",
+                                                key: "actions",
+                                                width: 280,
+                                                render: (_, user) => (
+                                                    <Space size={4}>
+                                                        <Button type="link" size="small" icon={<RadioTower className="size-3.5" />} onClick={() => navigate(`/admin/user-channels?user=${user.id}`)}>
+                                                            渠道配置
+                                                        </Button>
+                                                        <Button type="link" size="small" icon={<KeyRound className="size-3.5" />} onClick={() => setPasswordUser(user)}>
+                                                            重置密码
+                                                        </Button>
+                                                        <Popconfirm
+                                                            title={user.status === "active" ? "停用这个账号？" : "启用这个账号？"}
+                                                            description={user.status === "active" ? "该用户现有登录会话会立即失效。" : undefined}
+                                                            onConfirm={() => void toggleStatus(user)}
+                                                            disabled={user.id === currentUser?.id}
+                                                        >
+                                                            <Button type="link" size="small" danger={user.status === "active"} disabled={user.id === currentUser?.id}>
+                                                                {user.status === "active" ? "停用" : "启用"}
+                                                            </Button>
+                                                        </Popconfirm>
+                                                    </Space>
+                                                ),
+                                            },
                                         ]}
-                                        onChange={(value) => void changeRole(user, value)}
                                     />
-                                ),
-                            },
-                            {
-                                title: "状态",
-                                dataIndex: "status",
-                                width: 100,
-                                render: (status: AuthUser["status"]) => <Tag color={status === "active" ? "green" : "default"}>{status === "active" ? "启用" : "停用"}</Tag>,
-                            },
-                            {
-                                title: "最近登录",
-                                dataIndex: "lastLoginAt",
-                                width: 180,
-                                render: (value: string | null) => (value ? new Date(value).toLocaleString() : "从未登录"),
-                            },
-                            {
-                                title: "创建时间",
-                                dataIndex: "createdAt",
-                                width: 180,
-                                render: (value: string) => new Date(value).toLocaleString(),
-                            },
-                            {
-                                title: "操作",
-                                key: "actions",
-                                width: 280,
-                                render: (_, user) => (
-                                    <Space size={4}>
-                                        <Button type="link" size="small" icon={<RadioTower className="size-3.5" />} onClick={() => navigate(`/admin/user-channels?user=${user.id}`)}>
-                                            渠道配置
-                                        </Button>
-                                        <Button type="link" size="small" icon={<KeyRound className="size-3.5" />} onClick={() => setPasswordUser(user)}>
-                                            重置密码
-                                        </Button>
-                                        <Popconfirm
-                                            title={user.status === "active" ? "停用这个账号？" : "启用这个账号？"}
-                                            description={user.status === "active" ? "该用户现有登录会话会立即失效。" : undefined}
-                                            onConfirm={() => void toggleStatus(user)}
-                                            disabled={user.id === currentUser?.id}
-                                        >
-                                            <Button type="link" size="small" danger={user.status === "active"} disabled={user.id === currentUser?.id}>
-                                                {user.status === "active" ? "停用" : "启用"}
-                                            </Button>
-                                        </Popconfirm>
-                                    </Space>
-                                ),
-                            },
-                        ]}
-                    />
-                </div>
+                                </div>
+                            ),
+                        },
+                        {
+                            key: "projects",
+                            label: "项目管理",
+                            children: <AdminProjectManagement users={users} />,
+                        },
+                    ]}
+                />
             </div>
 
             <Modal

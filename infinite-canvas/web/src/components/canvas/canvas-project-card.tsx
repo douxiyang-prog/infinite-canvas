@@ -8,7 +8,7 @@ import { useCanvasUiStore } from "@/stores/canvas/use-canvas-ui-store";
 import { exportCanvasProjects } from "@/lib/canvas/canvas-export";
 import { hasAgentUrlBootstrap } from "@/lib/agent/agent-url-bootstrap";
 
-export function CanvasProjectCard({ project }: { project: CanvasProject }) {
+export function CanvasProjectCard({ project, selectable = true }: { project: CanvasProject; selectable?: boolean }) {
     const { i18n, t } = useTranslation();
     const navigate = useNavigate();
     const [searchParams] = useSearchParams();
@@ -25,7 +25,10 @@ export function CanvasProjectCard({ project }: { project: CanvasProject }) {
     const selected = selectedIds.includes(project.id);
     const open = () => {
         const agentHash = hasAgentUrlBootstrap(window.location.hash) ? window.location.hash : "";
-        navigate(`/canvas/${project.id}${searchParams.toString() ? `?${searchParams.toString()}` : ""}${agentHash}`, { replace: Boolean(agentHash) });
+        const query = new URLSearchParams(searchParams);
+        if (project.teamProjectId) query.set("teamProjectId", project.teamProjectId);
+        else query.delete("teamProjectId");
+        navigate(`/canvas/${project.id}${query.toString() ? `?${query.toString()}` : ""}${agentHash}`, { replace: Boolean(agentHash) });
     };
     const saveTitle = () => {
         renameProject(project.id, editingTitle);
@@ -35,14 +38,16 @@ export function CanvasProjectCard({ project }: { project: CanvasProject }) {
     return (
         <article className="group flex min-h-44 cursor-pointer flex-col justify-between rounded-2xl bg-[#f1eee8] p-5 transition hover:bg-[#ebe6dc] dark:bg-white/5 dark:hover:bg-white/10" onClick={() => !editing && open()}>
             <div className="flex items-start gap-3">
-                <input
-                    type="checkbox"
-                    checked={selected}
-                    onClick={(event) => event.stopPropagation()}
-                    onChange={(event) => toggleSelected(project.id, event.target.checked)}
-                    className="mt-1 size-4 accent-stone-950 dark:accent-stone-100"
-                    aria-label={t("canvas.project.select", { name: project.title })}
-                />
+                {selectable ? (
+                    <input
+                        type="checkbox"
+                        checked={selected}
+                        onClick={(event) => event.stopPropagation()}
+                        onChange={(event) => toggleSelected(project.id, event.target.checked)}
+                        className="mt-1 size-4 accent-stone-950 dark:accent-stone-100"
+                        aria-label={t("canvas.project.select", { name: project.title })}
+                    />
+                ) : null}
                 {editing ? (
                     <Input className="min-w-0" value={editingTitle} onClick={(event) => event.stopPropagation()} onChange={(event) => setEditingTitle(event.target.value)} onKeyDown={(event) => event.key === "Enter" && saveTitle()} autoFocus />
                 ) : (
@@ -55,9 +60,8 @@ export function CanvasProjectCard({ project }: { project: CanvasProject }) {
                         }}
                     >
                         <h2 className="truncate text-xl font-semibold">{project.title}</h2>
-                        <p className="mt-3 text-sm leading-6 text-stone-600 dark:text-stone-400">
-                            {t("canvas.project.stats", { nodes: project.nodes.length, connections: project.connections.length })}
-                        </p>
+                        {project.scope === "project" ? <p className="mt-1 truncate text-xs text-stone-500">项目：{project.teamProjectTitle}</p> : null}
+                        <p className="mt-3 text-sm leading-6 text-stone-600 dark:text-stone-400">{t("canvas.project.stats", { nodes: project.nodes.length, connections: project.connections.length })}</p>
                     </button>
                 )}
             </div>

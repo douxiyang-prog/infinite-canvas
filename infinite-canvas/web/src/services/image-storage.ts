@@ -18,6 +18,7 @@ type ImageReadOptions = {
     signal?: AbortSignal;
     area?: FileArea;
     projectId?: string;
+    teamProjectId?: string;
 };
 
 const previewUrls = new Map<string, string>();
@@ -45,6 +46,7 @@ async function storeImage(blob: Blob, options?: ImageReadOptions): Promise<Uploa
         const uploaded = await uploadCanvasFile(blob, {
             area: options?.area || "input",
             projectId: options?.projectId,
+            teamProjectId: options?.teamProjectId,
             kind: "image",
             storageKey,
             width: meta.width,
@@ -210,11 +212,12 @@ function deleteImagePreview(storageKey: string) {
     previewUrls.delete(storageKey);
 }
 
-export async function setImageBlob(storageKey: string, blob: Blob) {
+export async function setImageBlob(storageKey: string, blob: Blob, options?: { teamProjectId?: string }) {
     await uploadCanvasFile(blob, {
         area: "input",
         kind: "image",
         storageKey,
+        teamProjectId: options?.teamProjectId,
     });
     deleteImagePreview(storageKey);
     await storeImagePreview(storageKey, blob);

@@ -7,10 +7,17 @@ import { ApiError } from "@/services/api/auth";
 import { deleteProject as deleteServerProject, fetchProjects, saveProject as saveServerProject } from "@/services/api/projects";
 import type { CanvasBackgroundMode } from "@/lib/canvas-theme";
 import type { CanvasAssistantSession, CanvasConnection, CanvasNodeData, ViewportTransform } from "@/types/canvas";
+import type { TeamProject } from "@/types/team-project";
+
+export type CanvasScope = "personal" | "project";
 
 export type CanvasProject = {
     id: string;
     title: string;
+    scope: CanvasScope;
+    teamProjectId: string | null;
+    teamProjectTitle: string | null;
+    ownerDisplayName: string | null;
     createdAt: string;
     updatedAt: string;
     nodes: CanvasNodeData[];
@@ -30,13 +37,15 @@ export type CanvasDeletedProject = {
 type CanvasStore = {
     hydrated: boolean;
     projects: CanvasProject[];
+    teamProjects: TeamProject[];
     deletedProjects: CanvasDeletedProject[];
-    createProject: (title?: string) => string;
-    importProject: (project: Partial<CanvasProject>) => string;
+    createProject: (title?: string, teamProject?: Pick<TeamProject, "id" | "title">) => string;
+    importProject: (project: Partial<CanvasProject>, teamProject?: Pick<TeamProject, "id" | "title">) => string;
     openProject: (id: string) => CanvasProject | null;
     renameProject: (id: string, title: string) => void;
     deleteProjects: (ids: string[]) => void;
-    replaceProjects: (projects: CanvasProject[], deletedProjects?: CanvasDeletedProject[]) => void;
+    refreshProjects: () => Promise<void>;
+    replaceProjects: (projects: CanvasProject[], deletedProjects?: CanvasDeletedProject[], teamProjects?: TeamProject[]) => void;
     updateProject: (id: string, patch: Partial<Pick<CanvasProject, "nodes" | "connections" | "chatSessions" | "activeChatId" | "backgroundMode" | "showImageInfo" | "viewport">>) => void;
 };
 
@@ -89,6 +98,7 @@ const canvasStorage: PersistStorage<CanvasStore> = {
             projectVersions.clear();
             for (const [id, version] of Object.entries(data.versions)) projectVersions.set(id, Number(version));
             const state = { projects: data.projects, deletedProjects: [] } as PersistedCanvasState;
+            useCanvasStore.setState({ teamProjects: data.teamProjects || [] });
             lastPersistedState = state;
             return { state, version: 0 } as StorageValue<CanvasStore>;
         } catch (error) {
@@ -126,7 +136,7 @@ export function prepareCanvasStoreForSession() {
     }
     lastPersistedState = null;
     projectVersions.clear();
-    useCanvasStore.setState({ hydrated: false, projects: [], deletedProjects: [] });
+    useCanvasStore.setState({ hydrated: false, projects: [], teamProjects: [], deletedProjects: [] });
 }
 
 export const useCanvasStore = create<CanvasStore>()(
@@ -134,13 +144,18 @@ export const useCanvasStore = create<CanvasStore>()(
         (set, get) => ({
             hydrated: false,
             projects: [],
+            teamProjects: [],
             deletedProjects: [],
-            createProject: (title = i18n.t("canvas.project.untitled")) => {
+            createProject: (title = i18n.t("canvas.project.untitled"), teamProject) => {
                 const now = new Date().toISOString();
                 const id = nanoid();
                 const project: CanvasProject = {
                     id,
                     title,
+                    scope: teamProject ? "project" : "personal",
+                    teamProjectId: teamProject?.id || null,
+                    teamProjectTitle: teamProject?.title || null,
+                    ownerDisplayName: null,
                     createdAt: now,
                     updatedAt: now,
                     nodes: [],
@@ -154,11 +169,15 @@ export const useCanvasStore = create<CanvasStore>()(
                 set((state) => ({ projects: [project, ...state.projects] }));
                 return id;
             },
-            importProject: (source) => {
+            importProject: (source, teamProject) => {
                 const now = new Date().toISOString();
                 const project: CanvasProject = {
                     id: nanoid(),
                     title: source.title || i18n.t("canvas.project.imported"),
+                    scope: teamProject ? "project" : "personal",
+                    teamProjectId: teamProject?.id || null,
+                    teamProjectTitle: teamProject?.title || null,
+                    ownerDisplayName: null,
                     createdAt: source.createdAt || now,
                     updatedAt: now,
                     nodes: source.nodes || [],
@@ -187,7 +206,14 @@ export const useCanvasStore = create<CanvasStore>()(
                     const deletedProjects = [...state.deletedProjects.filter((item) => !removing.has(item.id)), ...ids.map((id) => ({ id, deletedAt: now }))];
                     return { projects, deletedProjects };
                 }),
-            replaceProjects: (projects, deletedProjects = []) => set({ projects, deletedProjects }),
+            refreshProjects: async () => {
+                const data = await fetchProjects();
+                projectVersions.clear();
+                for (const [id, version] of Object.entries(data.versions)) projectVersions.set(id, Number(version));
+                lastPersistedState = { projects: data.projects, deletedProjects: [] };
+                set({ projects: data.projects, teamProjects: data.teamProjects || [], deletedProjects: [] });
+            },
+            replaceProjects: (projects, deletedProjects = [], teamProjects) => set((state) => ({ projects, deletedProjects, teamProjects: teamProjects ?? state.teamProjects })),
             updateProject: (id, patch) =>
                 set((state) => ({
                     projects: state.projects.map((project) => (project.id === id ? { ...project, ...patch, updatedAt: new Date().toISOString() } : project)),

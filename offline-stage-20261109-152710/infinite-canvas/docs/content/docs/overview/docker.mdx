@@ -1,0 +1,70 @@
+---
+title: Docker Deployment
+description: Deploy Infinite Canvas with Docker Compose
+---
+
+# Docker Deployment
+
+## Build from source
+
+```bash
+git clone git@github.com:basketikun/infinite-canvas.git
+cd infinite-canvas
+cp .env.example .env
+# Edit .env with the MySQL connection and initial administrator
+docker compose up -d --build
+```
+
+Open `http://localhost:3000`.
+
+## Build locally
+
+```bash
+cp .env.example .env
+# Edit .env with the MySQL connection and initial administrator
+docker compose -f docker-compose.local.yml up -d --build
+```
+
+The customized deployment runs the web application and an API container. Create the database named by `MYSQL_DATABASE` first. When the users table is empty, the API creates the first administrator from `BOOTSTRAP_ADMIN_USERNAME` and `BOOTSTRAP_ADMIN_PASSWORD`; remove those variables after bootstrap.
+
+Set `COOKIE_SECURE=true` for HTTPS deployments. Do not commit the initial password or database password.
+
+## Documentation image
+
+The documentation in `docs/` is a separate Next.js standalone application with server capabilities.
+
+```bash
+cd docs
+docker compose up -d
+```
+
+To build it from the current source:
+
+```bash
+cd docs
+docker compose -f docker-compose.local.yml up -d --build
+```
+
+The customized application provides the Vite frontend, Nginx, and an authentication API. User profiles, password hashes, login sessions, and canvas/file indexes are stored in MySQL. Canvas JSON, My Assets, and media files are written to the configured server storage directory. Generation history and AI API keys remain browser-local. Prompt sources are still fetched directly by the browser.
+
+## Optional analytics
+
+No analytics are enabled by default. A deployment can enable GA4, Baidu Analytics, or both at runtime:
+
+| Variable | Description |
+| --- | --- |
+| `ANALYTICS_GA4_ID` | Google Analytics 4 measurement ID (`G-XXXX`) |
+| `ANALYTICS_BAIDU_ID` | Baidu site ID, the hash after `hm.js?` |
+
+```yaml
+services:
+  app:
+    image: ghcr.io/basketikun/infinite-canvas:latest
+    ports:
+      - "3000:3000"
+    environment:
+      ANALYTICS_GA4_ID: G-XXXXXXXXXX
+      ANALYTICS_BAIDU_ID: e8263761cc5c32f5f7a855b8203b965a
+```
+
+SPA route changes automatically report page views to enabled providers. Only configure analytics IDs on sites you control, and do not commit them to the repository.

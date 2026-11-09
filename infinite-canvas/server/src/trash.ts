@@ -36,23 +36,33 @@ export async function restoreProject(userId: number, projectId: string) {
   if (new Date(entry.purge_after).getTime() <= Date.now())
     throw new HttpError(410, "回收站保留期已结束");
 
-  await db.execute("UPDATE trash_entries SET status = 'restoring' WHERE id = ?", [entry.id]);
+  await db.execute(
+    "UPDATE trash_entries SET status = 'restoring' WHERE id = ?",
+    [entry.id],
+  );
   const source = resolveStoragePath(settings.root, entry.trash_path);
   const target = resolveStoragePath(settings.root, entry.original_path);
   try {
     await moveIntoPlace(source, target);
     await db.execute(
-      "UPDATE canvas_projects SET deleted_at = NULL, version = version + 1 WHERE id = ? AND owner_user_id = ?",
-      [projectId, userId],
+      "UPDATE canvas_projects SET deleted_at = NULL, version = version + 1 WHERE id = ?",
+      [projectId],
     );
     await db.execute(
       "UPDATE canvas_files SET deleted_at = NULL WHERE project_id = ?",
       [projectId],
     );
-    await db.execute("UPDATE trash_entries SET status = 'restored' WHERE id = ?", [entry.id]);
+    await db.execute(
+      "UPDATE trash_entries SET status = 'restored' WHERE id = ?",
+      [entry.id],
+    );
   } catch (error) {
     await rename(target, source).catch(() => undefined);
-    await db.execute("UPDATE trash_entries SET status = 'trashed' WHERE id = ?", [entry.id]).catch(() => undefined);
+    await db
+      .execute("UPDATE trash_entries SET status = 'trashed' WHERE id = ?", [
+        entry.id,
+      ])
+      .catch(() => undefined);
     throw error;
   }
   return { restored: true };
@@ -70,7 +80,10 @@ export async function purgeExpiredTrash() {
   );
   let purged = 0;
   for (const entry of rows) {
-    await db.execute("UPDATE trash_entries SET status = 'purging' WHERE id = ? AND status = 'trashed'", [entry.id]);
+    await db.execute(
+      "UPDATE trash_entries SET status = 'purging' WHERE id = ? AND status = 'trashed'",
+      [entry.id],
+    );
     const trashPath = resolveStoragePath(settings.root, entry.trash_path);
     const purgingPath = `${trashPath}.purging-${Date.now()}`;
     try {
@@ -79,13 +92,21 @@ export async function purgeExpiredTrash() {
       });
       await rm(purgingPath, { recursive: true, force: true });
       if (entry.resource_type === "project") {
-        await db.execute("DELETE FROM canvas_files WHERE project_id = ?", [entry.resource_id]);
-        await db.execute("DELETE FROM canvas_projects WHERE id = ? AND owner_user_id = ?", [entry.resource_id, entry.owner_user_id]);
+        await db.execute("DELETE FROM canvas_files WHERE project_id = ?", [
+          entry.resource_id,
+        ]);
+        await db.execute("DELETE FROM canvas_projects WHERE id = ?", [
+          entry.resource_id,
+        ]);
       }
       await db.execute("DELETE FROM trash_entries WHERE id = ?", [entry.id]);
       purged += 1;
     } catch (error) {
-      await db.execute("UPDATE trash_entries SET status = 'trashed' WHERE id = ?", [entry.id]).catch(() => undefined);
+      await db
+        .execute("UPDATE trash_entries SET status = 'trashed' WHERE id = ?", [
+          entry.id,
+        ])
+        .catch(() => undefined);
       console.error(`Failed to purge trash entry ${entry.id}`, error);
     }
   }

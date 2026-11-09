@@ -69,6 +69,10 @@ function assetRelativePath(userId: number) {
   return `users/${userId}/assets/${ASSET_FILE}`;
 }
 
+function teamAssetRelativePath(teamProjectId: string) {
+  return `team-projects/${teamProjectId}/assets/${ASSET_FILE}`;
+}
+
 function asObject(value: unknown, label: string) {
   if (!value || typeof value !== "object" || Array.isArray(value))
     throw new HttpError(400, `${label}格式不正确`);
@@ -173,12 +177,9 @@ function normalizeAsset(
   };
 }
 
-async function readAssetFile(userId: number): Promise<Asset[]> {
+async function readAssetFileAt(relativePath: string): Promise<Asset[]> {
   const settings = await requireStorageSettings();
-  const filePath = resolveStoragePath(
-    settings.root,
-    assetRelativePath(userId),
-  );
+  const filePath = resolveStoragePath(settings.root, relativePath);
   let content: string;
   try {
     content = await readFile(filePath, "utf8");
@@ -203,9 +204,8 @@ async function readAssetFile(userId: number): Promise<Asset[]> {
   );
 }
 
-async function writeAssetFile(userId: number, assets: Asset[]) {
+async function writeAssetFileAt(relativePath: string, assets: Asset[]) {
   const settings = await requireStorageSettings();
-  const relativePath = assetRelativePath(userId);
   const filePath = resolveStoragePath(settings.root, relativePath);
   await mkdir(dirname(filePath), { recursive: true });
   const payload: AssetFile = {
@@ -222,6 +222,22 @@ async function writeAssetFile(userId: number, assets: Asset[]) {
     await rm(tempPath, { force: true }).catch(() => undefined);
     throw error;
   }
+}
+
+function readAssetFile(userId: number) {
+  return readAssetFileAt(assetRelativePath(userId));
+}
+
+function writeAssetFile(userId: number, assets: Asset[]) {
+  return writeAssetFileAt(assetRelativePath(userId), assets);
+}
+
+function readTeamAssetFile(teamProjectId: string) {
+  return readAssetFileAt(teamAssetRelativePath(teamProjectId));
+}
+
+function writeTeamAssetFile(teamProjectId: string, assets: Asset[]) {
+  return writeAssetFileAt(teamAssetRelativePath(teamProjectId), assets);
 }
 
 export async function listAssets(userId: number) {
@@ -316,6 +332,87 @@ export async function replaceAssets(userId: number, value: unknown) {
       );
     });
     await writeAssetFile(userId, assets);
+    return { assets };
+  });
+}
+
+export async function listTeamAssets(teamProjectId: string) {
+  return { assets: await readTeamAssetFile(teamProjectId) };
+}
+
+export async function createTeamAsset(teamProjectId: string, value: unknown) {
+  return withAssetLock(`team:${teamProjectId}`, async () => {
+    const now = new Date().toISOString();
+    const asset = normalizeAsset(
+      value,
+      randomUUID().replace(/-/g, ""),
+      now,
+      now,
+    );
+    const assets = await readTeamAssetFile(teamProjectId);
+    assets.unshift(asset);
+    await writeTeamAssetFile(teamProjectId, assets);
+    return { asset };
+  });
+}
+
+export async function updateTeamAsset(
+  teamProjectId: string,
+  id: string,
+  value: unknown,
+) {
+  if (!ASSET_ID.test(id)) throw new HttpError(400, "资产 ID 格式不正确");
+  return withAssetLock(`team:${teamProjectId}`, async () => {
+    const assets = await readTeamAssetFile(teamProjectId);
+    const index = assets.findIndex((asset) => asset.id === id);
+    if (index === -1) throw new HttpError(404, "项目资产不存在");
+    const asset = normalizeAsset(
+      value,
+      id,
+      assets[index].createdAt,
+      new Date().toISOString(),
+    );
+    assets[index] = asset;
+    await writeTeamAssetFile(teamProjectId, assets);
+    return { asset };
+  });
+}
+
+export async function deleteTeamAsset(teamProjectId: string, id: string) {
+  if (!ASSET_ID.test(id)) throw new HttpError(400, "资产 ID 格式不正确");
+  return withAssetLock(`team:${teamProjectId}`, async () => {
+    const assets = await readTeamAssetFile(teamProjectId);
+    const next = assets.filter((asset) => asset.id !== id);
+    if (next.length === assets.length) throw new HttpError(404, "项目资产不存在");
+    await writeTeamAssetFile(teamProjectId, next);
+    return { deleted: true };
+  });
+}
+
+export async function importTeamAssets(
+  teamProjectId: string,
+  value: unknown,
+) {
+  if (!Array.isArray(value)) throw new HttpError(400, "资产列表格式不正确");
+  return withAssetLock(`team:${teamProjectId}`, async () => {
+    const existing = await readTeamAssetFile(teamProjectId);
+    const byId = new Map(existing.map((asset) => [asset.id, asset]));
+    for (const item of value) {
+      const raw = asObject(item, "资产");
+      const now = new Date().toISOString();
+      const id = assetId(raw.id, randomUUID().replace(/-/g, ""));
+      byId.set(
+        id,
+        normalizeAsset(
+          raw,
+          id,
+          dateValue(raw.createdAt, now),
+          dateValue(raw.updatedAt, now),
+        ),
+      );
+    }
+    const assets = Array.from(byId.values());
+    await writeTeamAssetFile(teamProjectId, assets);
     return { assets };
   });
 }

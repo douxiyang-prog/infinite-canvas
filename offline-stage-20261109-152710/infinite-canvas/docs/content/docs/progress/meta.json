@@ -1,0 +1,13 @@
+{
+  "title": "Project Progress",
+  "root": true,
+  "defaultOpen": true,
+  "pages": [
+    "[Changelog](/docs/progress/changelog)",
+    "seedance-cloud-update",
+    "local-agent-integration-plan",
+    "prompt-chip-input-plan",
+    "pending-test",
+    "todo"
+  ]
+}

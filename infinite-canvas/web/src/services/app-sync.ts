@@ -92,10 +92,13 @@ export async function syncAppDataToWebdav(config: WebdavSyncConfig, onProgress?:
             emptyData: { projects: [], deleted: [] },
             localData: async () => {
                 const { projects, deletedProjects } = useCanvasStore.getState();
-                return { projects, deleted: deletedProjects };
+                return { projects: projects.filter((project) => project.scope !== "project"), deleted: deletedProjects };
             },
             mergeData: mergeCanvasData,
-            applyData: async (data) => useCanvasStore.getState().replaceProjects(data.projects, data.deleted),
+            applyData: async (data) => {
+                const teamProjects = useCanvasStore.getState().projects.filter((project) => project.scope === "project");
+                useCanvasStore.getState().replaceProjects([...data.projects, ...teamProjects], data.deleted);
+            },
         }),
         syncDomain<AssetDomainData>(config, onProgress, {
             key: "assets",

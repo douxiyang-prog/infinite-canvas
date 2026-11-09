@@ -158,6 +158,7 @@ backup_image() {
 
 APP_BACKUP="$(backup_image "$APP_REPO")"
 API_BACKUP="$(backup_image "$API_REPO")"
+NGINX_BACKUP=""
 
 services_recreated=0
 cleanup_on_exit() {
@@ -173,6 +174,10 @@ cleanup_on_exit() {
     fi
     if [[ -n "$API_BACKUP" ]]; then
       "${DOCKER[@]}" tag "$API_BACKUP" "${API_REPO}:latest"
+    fi
+    if [[ -n "$NGINX_BACKUP" ]]; then
+      cp -p "$NGINX_BACKUP" "$DEPLOY_DIR/nginx.conf"
+      log "已恢复原部署 Nginx 配置"
     fi
     if [[ -n "$APP_BACKUP" || -n "$API_BACKUP" ]]; then
       (
@@ -209,6 +214,21 @@ log "验证新镜像包含必要代码"
   -c 'grep -R -F -q -- "$MARKER" /usr/share/nginx/html/assets'
 "${DOCKER[@]}" run --rm -e "MARKER=$API_MARKER" --entrypoint sh "${API_REPO}:latest" \
   -c 'grep -R -F -q -- "$MARKER" /app/src'
+
+if [[ -f "$SOURCE_DIR/deploy/nginx.conf" ]]; then
+  log "验证部署 Nginx 配置"
+  "${DOCKER[@]}" run --rm --add-host api:127.0.0.1 \
+    -v "$SOURCE_DIR/deploy/nginx.conf:/etc/nginx/conf.d/default.conf:ro" \
+    --entrypoint nginx "${APP_REPO}:latest" -t
+  if [[ -f "$DEPLOY_DIR/nginx.conf" ]]; then
+    NGINX_BACKUP="$DEPLOY_DIR/nginx.conf.backup-$STAMP"
+    cp -p "$DEPLOY_DIR/nginx.conf" "$NGINX_BACKUP"
+  fi
+  install -m 0644 \
+    "$SOURCE_DIR/deploy/nginx.conf" \
+    "$DEPLOY_DIR/nginx.conf"
+  log "已更新部署 Nginx 配置"
+fi
 
 log "重建 api 和 app 容器"
 services_recreated=1

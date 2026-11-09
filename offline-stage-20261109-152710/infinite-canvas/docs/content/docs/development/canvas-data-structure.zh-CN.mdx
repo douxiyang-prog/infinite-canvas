@@ -1,0 +1,229 @@
+---
+title: 画布数据结构
+description: 画布服务端存储、节点结构、媒体文件与清理机制
+---
+
+# 画布数据结构
+
+本文档说明当前画布在服务端保存的数据结构、图片文件的存储和清理方式。
+
+## 当前存储位置
+
+画布项目和我的资产以服务端为准：
+
+- 画布项目 JSON：写入管理员配置的存储根目录，路径为 `users/<userId>/projects/<projectId>/project.json`；项目索引和版本保存在 MySQL 的 `canvas_projects`。
+- 我的资产 JSON：写入 `users/<userId>/assets/assets.json`，按登录用户隔离；新增、编辑和删除均等待服务端写入成功后再更新界面。
+- 图片和视频文件：通过 `/api/files` 写入存储根目录，文件索引保存在 MySQL 的 `canvas_files`。
+- 用户渠道权限：全局渠道配置保存在 `system_settings`；每个账号的渠道分配保存在 MySQL 的 `user_channel_assignments`，`all_channels=1` 表示自动包含当前及以后新增的全部渠道。
+- 浏览器 `localForage`：只保留缩略图缓存、生成记录和旧版资产迁移来源，不再作为画布或资产清单的唯一存储。
+
+旧版浏览器中的 `infinite-canvas:asset_store` 会在首次加载时自动导入当前登录账号的服务端资产文件，导入成功后删除旧键。
+
+画布 JSON 不直接长期保存大体积 base64 图片或视频。图片节点、视频节点、助手图片和素材媒体只保存展示 URL、`storageKey` 和元信息，真实 Blob 通过 `storageKey` 读取。
+
+## 画布项目结构
+
+每个画布项目是一个 `CanvasProject`：
+
+```ts
+type CanvasProject = {
+  id: string;
+  title: string;
+  createdAt: string;
+  updatedAt: string;
+  nodes: CanvasNodeData[];
+  connections: CanvasConnection[];
+  chatSessions: CanvasAssistantSession[];
+  activeChatId: string | null;
+  backgroundMode: "lines" | "dots" | "blank";
+  viewport: { x: number; y: number; k: number };
+};
+```
+
+字段说明：
+
+- `id`：画布项目 ID，当前前端生成。
+- `title`：画布名称。
+- `createdAt` / `updatedAt`：ISO 字符串。
+- `nodes`：画布节点列表。
+- `connections`：节点连线列表。
+- `chatSessions`：右侧画布助手会话。
+- `activeChatId`：当前选中的助手会话 ID。
+- `backgroundMode`：画布背景模式。
+- `viewport`：视口变换，`x/y` 是屏幕平移，`k` 是缩放比例。
+
+## 节点结构
+
+每个节点是一个 `CanvasNodeData`：
+
+```ts
+type CanvasNodeData = {
+  id: string;
+  type: "image" | "text" | "config" | "video";
+  title: string;
+  position: { x: number; y: number };
+  width: number;
+  height: number;
+  metadata?: CanvasNodeMetadata;
+};
+```
+
+通用字段：
+
+- `id`：节点 ID。
+- `type`：节点类型，当前有图片、文本、生成配置、视频四类。
+- `title`：节点标题。
+- `position`：画布世界坐标，不是屏幕坐标。
+- `width` / `height`：画布世界坐标下的节点尺寸。
+- `metadata`：节点内容和业务状态。
+
+`metadata` 当前常用字段：
+
+```ts
+type CanvasNodeImage = {
+  id: string;
+  status: "idle" | "success" | "loading" | "error";
+  errorDetails?: string;
+  content: string;
+  storageKey: string;
+  naturalWidth: number;
+  naturalHeight: number;
+  bytes: number;
+  mimeType: string;
+};
+
+type CanvasNodeMetadata = {
+  content?: string;
+  prompt?: string;
+  status?: "idle" | "success" | "loading" | "error";
+  errorDetails?: string;
+  fontSize?: number;
+  generationMode?: "text" | "image" | "video";
+  model?: string;
+  size?: string;
+  count?: number;
+  naturalWidth?: number;
+  naturalHeight?: number;
+  freeResize?: boolean;
+  images?: CanvasNodeImage[];
+  primaryImageId?: string;
+  inputOrder?: string[];
+  storageKey?: string;
+  mimeType?: string;
+  bytes?: number;
+  videoTaskId?: string;
+};
+```
+
+不同节点的使用方式：
+
+- 图片节点：`content` 是当前可展示的图片 URL，正常写入后为 `/api/files/...` 地址；`storageKey` 是服务端长期媒体标识；`naturalWidth/naturalHeight/bytes/mimeType` 保存原图信息。
+- 视频节点：`content` 是当前可播放的视频 URL，正常写入后为 `/api/files/...` 地址；`storageKey` 指向服务端视频文件；`bytes/mimeType` 保存文件信息；OpenAI 风格异步生成会把远端 `videoTaskId` 一起写入节点，刷新后可继续按任务 ID 查询状态。
+- 文本节点：`content` 保存文本内容；`fontSize` 保存字体大小；`prompt/status/errorDetails` 保存生成状态。
+- 生成配置节点：`generationMode/model/size/count/inputOrder` 保存生成配置；`generationMode` 可选择文本、图片或视频；上游输入通过 `connections` 计算。
+- 多图图片节点：批量生成仍只保存为一个图片节点，请求开始前会在 `images` 中创建全部图片槽位，每个槽位通过 `status/errorDetails` 独立记录实时状态，成功后补充图片数据；最先成功的槽位会立即写入 `primaryImageId`，并由节点级 `content` 和图片元数据展示；展开状态仅属于当前界面，不写入项目数据。
+
+## 连线结构
+
+每条连线是一个 `CanvasConnection`：
+
+```ts
+type CanvasConnection = {
+  id: string;
+  fromNodeId: string;
+  toNodeId: string;
+};
+```
+
+连线只保存节点 ID，不保存端口坐标。渲染时根据节点位置和尺寸计算路径。
+
+删除节点时会同步删除以该节点为起点或终点的连线。删除图片组根节点时，会把对应子节点一起删除。
+
+## 助手会话结构
+
+助手会话保存在画布项目内：
+
+```ts
+type CanvasAssistantSession = {
+  id: string;
+  title: string;
+  messages: CanvasAssistantMessage[];
+  createdAt: string;
+  updatedAt: string;
+};
+```
+
+消息结构：
+
+```ts
+type CanvasAssistantMessage = {
+  id: string;
+  role: "user" | "assistant";
+  mode: "ask" | "image";
+  text: string;
+  isLoading?: boolean;
+  references?: CanvasAssistantReference[];
+  images?: CanvasAssistantImage[];
+};
+```
+
+图片引用和助手生成图片也遵循同一套图片存储规则：
+
+- `dataUrl` 字段当前可能是 `blob:` URL，也可能是旧数据中的 `data:image/...`。
+- `storageKey` 存在时，以 `storageKey` 为准读取图片 Blob。
+- 发送到 AI 接口前，如果接口需要 base64，会通过 `imageToDataUrl` 临时把 Blob URL 转成 data URL。
+
+## 图片写入流程
+
+所有新增图片应通过 `uploadImage(input)` 写入：
+
+1. 传入 `Blob` 或 data URL。
+2. 内部转成 `Blob`。
+3. 生成 `storageKey`，格式为 `image:<id>`。
+4. 通过 `/api/files` 把 Blob 写入服务端存储目录，并登记到 `canvas_files`。
+5. 返回 `/api/files/...` 展示地址，同时生成本地缩略图缓存。
+6. 读取图片宽高，返回：
+
+```ts
+type UploadedImage = {
+  url: string;
+  storageKey: string;
+  width: number;
+  height: number;
+  bytes: number;
+  mimeType: string;
+};
+```
+
+图片节点会通过 `imageMetadata(image)` 写入：
+
+```ts
+{
+  content: image.url,
+  ...(image.storageKey ? { storageKey: image.storageKey } : {}),
+  status: "success",
+  naturalWidth: image.width,
+  naturalHeight: image.height,
+  bytes: image.bytes,
+  mimeType: image.mimeType
+}
+```
+
+因此，已保存图片的 `content` 是服务端文件地址，长期标识是 `storageKey`。如果跨域限制导致远程图片无法读取，节点会保留可能过期的远程 `content`，并且没有 `storageKey`，不能视为已经完成持久化。
+
+## 图片读取和旧数据迁移
+
+打开画布时会执行图片补水：
+
+- 如果图片节点有 `storageKey`，通过 `resolveImageUrl(storageKey, fallback)` 生成服务端文件地址。
+- 如果图片节点没有 `storageKey`，但 `content` 是旧的 `data:image/...`，会调用 `uploadImage(content)` 迁移到服务端文件区，并补上 `storageKey`。
+- 助手消息里的引用图和生成图也会执行同类逻辑。
+
+我的素材读取时也会做迁移：
+
+- 有 `storageKey`：恢复 `coverUrl` 和 `data.dataUrl` 的服务端文件地址。
+- 无 `storageKey` 且保存了 base64：上传到服务端文件区，然后更新素材里的 `storageKey`。
+
+## 图片移除和清理
+
+删除资产时只移除服务端资产目录中的记录，不会直接删除可能仍被画布或生成记录引用的媒体文件。图片和视频的物理文件清理由服务端垃圾回收负责，避免同一 `storageKey` 被多个功能共享时误删。

@@ -8,6 +8,7 @@ import { BrandLogo } from "@/components/layout/brand-logo";
 import { navigationTools, type NavigationToolSlug } from "@/constant/navigation-tools";
 import { cn } from "@/lib/utils";
 import { useBrandingStore } from "@/stores/use-branding-store";
+import { useCanvasStore } from "@/stores/canvas/use-canvas-store";
 import { useUserStore } from "@/stores/use-user-store";
 
 const SIDEBAR_STORAGE_KEY = "infinite-canvas:sidebar-collapsed";
@@ -46,13 +47,16 @@ function SidebarLink({ tool, active, collapsed }: { tool: (typeof navigationTool
 
 export function AppSidebar() {
     const { t } = useTranslation();
-    const { pathname } = useLocation();
+    const { pathname, search } = useLocation();
     const companyName = useBrandingStore((state) => state.companyName);
     const user = useUserStore((state) => state.user);
     const isAdmin = user?.role === "admin";
     const visibleTools = navigationTools.filter((tool) => !("adminOnly" in tool && tool.adminOnly) || isAdmin);
     const slug = pathname.split("/").filter(Boolean)[0];
-    const activeToolSlug = navigationTools.some((tool) => tool.slug === slug) ? (slug as NavigationToolSlug) : undefined;
+    const canvasId = pathname.match(/^\/canvas\/([A-Za-z0-9_-]+)/)?.[1];
+    const currentCanvasScope = useCanvasStore((state) => (canvasId ? state.projects.find((project) => project.id === canvasId)?.scope : undefined));
+    const isProjectCanvas = Boolean(pathname.match(/^\/canvas\/[^/]+/)) && (new URLSearchParams(search).has("teamProjectId") || currentCanvasScope === "project");
+    const activeToolSlug = isProjectCanvas ? "projects" : navigationTools.some((tool) => tool.slug === slug) ? (slug as NavigationToolSlug) : undefined;
     const canvasProject = /^\/canvas\/[^/]+/.test(pathname);
     const [collapsed, setCollapsed] = useState(() => {
         const stored = localStorage.getItem(SIDEBAR_STORAGE_KEY);

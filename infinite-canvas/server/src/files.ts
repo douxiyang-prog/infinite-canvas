@@ -12,6 +12,7 @@ import { config } from "./config";
 import { db } from "./db";
 import { HttpError } from "./http";
 import { requireStorageSettings, resolveStoragePath } from "./storage";
+import { assertTeamProjectMember } from "./team-projects";
 
 const STORAGE_KEY = /^[A-Za-z0-9_-]{1,40}:[A-Za-z0-9_-]{1,80}$/;
 const PROJECT_ID = /^[A-Za-z0-9_-]{1,64}$/;
@@ -23,11 +24,15 @@ type FileRow = RowDataPacket & {
   mime_type: string;
   bytes: number;
   sha256: string;
+  owner_user_id?: number;
+  project_id?: string | null;
+  team_project_id?: string | null;
 };
 
 type ProjectRow = RowDataPacket & {
   id: string;
   owner_user_id: number;
+  team_project_id: string | null;
   deleted_at: Date | string | null;
 };
 
@@ -81,18 +86,34 @@ export async function saveFile(userId: number, form: FormData) {
     typeof projectValue === "string" && projectValue.trim()
       ? projectValue.trim()
       : null;
+  const requestedTeamProjectValue = form.get("teamProjectId");
+  const requestedTeamProjectId =
+    typeof requestedTeamProjectValue === "string" &&
+    requestedTeamProjectValue.trim()
+      ? requestedTeamProjectValue.trim()
+      : null;
   if (projectId && !PROJECT_ID.test(projectId))
     throw new HttpError(400, "画布 ID 格式不正确");
+  if (requestedTeamProjectId && !PROJECT_ID.test(requestedTeamProjectId))
+    throw new HttpError(400, "项目 ID 格式不正确");
   let projectExists = false;
+  let teamProjectId = requestedTeamProjectId;
   if (projectId) {
     const [projects] = await db.execute<ProjectRow[]>(
-      `SELECT id, owner_user_id, deleted_at FROM canvas_projects WHERE id = ? LIMIT 1`,
+      `SELECT id, owner_user_id, team_project_id, deleted_at FROM canvas_projects WHERE id = ? LIMIT 1`,
       [projectId],
     );
-    if (projects[0] && Number(projects[0].owner_user_id) !== userId)
+    if (projects[0]?.team_project_id)
+      await assertTeamProjectMember(projects[0].team_project_id, userId);
+    else if (projects[0] && Number(projects[0].owner_user_id) !== userId)
       throw new HttpError(404, "画布不存在");
     if (projects[0]?.deleted_at) throw new HttpError(410, "画布已删除");
+    if (projects[0]) teamProjectId = projects[0].team_project_id || null;
+    else if (requestedTeamProjectId)
+      await assertTeamProjectMember(requestedTeamProjectId, userId);
     projectExists = Boolean(projects[0]);
+  } else if (requestedTeamProjectId) {
+    await assertTeamProjectMember(requestedTeamProjectId, userId);
   }
 
   const settings = await requireStorageSettings();
@@ -105,8 +126,7 @@ export async function saveFile(userId: number, form: FormData) {
   const mimeType = file.type || "application/octet-stream";
   const kind = kindFor(mimeType, String(form.get("kind") || ""));
   const storageKey =
-    requestedKey ||
-    `${kind}:${randomUUID().replace(/-/g, "")}`;
+    requestedKey || `${kind}:${randomUUID().replace(/-/g, "")}`;
   if (!STORAGE_KEY.test(storageKey))
     throw new HttpError(400, "storageKey 格式不正确");
 
@@ -124,6 +144,8 @@ export async function saveFile(userId: number, form: FormData) {
     existing?.relative_path ||
     (projectId
       ? `users/${userId}/projects/${projectId}/${area}/${id}.${extension}`
+      : teamProjectId
+        ? `team-projects/${teamProjectId}/assets/${id}.${extension}`
       : `users/${userId}/${area}/${id}.${extension}`);
   const target = resolveStoragePath(settings.root, relativePath);
   await mkdir(dirname(target), { recursive: true });
@@ -147,17 +169,23 @@ export async function saveFile(userId: number, form: FormData) {
     if (projectId && !projectExists) {
       await connection.execute(
         `INSERT INTO canvas_projects
-           (id, owner_user_id, title, storage_path, version, size_bytes)
-         VALUES (?, ?, 'Untitled', ?, 0, 0)`,
-        [projectId, userId, `users/${userId}/projects/${projectId}`],
+           (id, owner_user_id, team_project_id, title, storage_path, version, size_bytes)
+         VALUES (?, ?, ?, 'Untitled', ?, 0, 0)`,
+        [
+          projectId,
+          userId,
+          teamProjectId,
+          `users/${userId}/projects/${projectId}`,
+        ],
       );
     }
     await connection.execute(
       `INSERT INTO canvas_files
-         (id, storage_key, owner_user_id, project_id, area, relative_path, kind, mime_type, bytes, sha256, width, height, duration_ms)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         (id, storage_key, owner_user_id, project_id, team_project_id, area, relative_path, kind, mime_type, bytes, sha256, width, height, duration_ms)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
        ON DUPLICATE KEY UPDATE
          project_id = VALUES(project_id),
+         team_project_id = VALUES(team_project_id),
          area = VALUES(area),
          relative_path = VALUES(relative_path),
          kind = VALUES(kind),
@@ -173,6 +201,7 @@ export async function saveFile(userId: number, form: FormData) {
         storageKey,
         userId,
         projectId,
+        teamProjectId,
         area,
         relativePath,
         kind,
@@ -230,12 +259,14 @@ export async function createPublicFileUrl(
       503,
       "参考视频需要配置 CANVAS_PUBLIC_BASE_URL 为花生壳公网地址",
     );
-  const [rows] = await db.execute<FileRow[]>(
-    `SELECT id FROM canvas_files
-      WHERE owner_user_id = ? AND storage_key = ? AND deleted_at IS NULL
-      LIMIT 1`,
-    [userId, storageKey],
-  );
+  const [rows] = await db.execute<FileRow[]>(accessibleFileSql(), [
+    storageKey,
+    userId,
+    userId,
+    userId,
+    userId,
+    userId,
+  ]);
   if (!rows[0]) throw new HttpError(404, "文件不存在");
   const expiresAt = Math.floor(Date.now() / 1000) + config.publicFileTtlSeconds;
   const signature = publicFileSignature(userId, storageKey, expiresAt);
@@ -288,7 +319,13 @@ function parseRange(value: string | null, size: number) {
     start = Number(match[1]);
     end = match[2] ? Number(match[2]) : size - 1;
   }
-  if (!Number.isInteger(start) || !Number.isInteger(end) || start < 0 || start >= size || end < start)
+  if (
+    !Number.isInteger(start) ||
+    !Number.isInteger(end) ||
+    start < 0 ||
+    start >= size ||
+    end < start
+  )
     throw new HttpError(416, "Range 请求超出文件范围");
   return { start, end: Math.min(end, size - 1) };
 }
@@ -299,13 +336,14 @@ export async function getFile(
   request: Request,
   publicAccess = false,
 ) {
-  const [rows] = await db.execute<FileRow[]>(
-    `SELECT id, storage_key, relative_path, mime_type, bytes, sha256
-       FROM canvas_files
-      WHERE owner_user_id = ? AND storage_key = ? AND deleted_at IS NULL
-      LIMIT 1`,
-    [userId, storageKey],
-  );
+  const [rows] = await db.execute<FileRow[]>(accessibleFileSql(), [
+    storageKey,
+    userId,
+    userId,
+    userId,
+    userId,
+    userId,
+  ]);
   const row = rows[0];
   if (!row) throw new HttpError(404, "文件不存在");
   const settings = await requireStorageSettings();
@@ -316,9 +354,11 @@ export async function getFile(
   const range = parseRange(request.headers.get("range"), size);
   const headers = new Headers({
     "Accept-Ranges": "bytes",
-    "Cache-Control": publicAccess ? "public, max-age=3600" : "private, no-cache",
+    "Cache-Control": publicAccess
+      ? "public, max-age=3600"
+      : "private, no-cache",
     "Content-Type": row.mime_type,
-    "ETag": `"${row.sha256}"`,
+    ETag: `"${row.sha256}"`,
     "X-Content-Type-Options": "nosniff",
   });
   if (!range) {
@@ -333,4 +373,53 @@ export async function getFile(
     request.method === "HEAD" ? null : file.slice(range.start, range.end + 1),
     { status: 206, headers },
   );
+}
+
+function accessibleFileSql() {
+  return `SELECT f.id, f.storage_key, f.relative_path, f.mime_type, f.bytes, f.sha256,
+                 f.owner_user_id, f.project_id, f.team_project_id
+            FROM canvas_files f
+           WHERE f.storage_key = ? AND f.deleted_at IS NULL
+             AND (
+               (
+                 f.project_id IS NULL
+                 AND f.team_project_id IS NULL
+                 AND f.owner_user_id = ?
+               )
+               OR EXISTS (
+                 SELECT 1
+                   FROM canvas_projects cp
+                  WHERE cp.id = f.project_id
+                    AND cp.deleted_at IS NULL
+                    AND (
+                      (cp.team_project_id IS NULL AND f.owner_user_id = ?)
+                      OR EXISTS (
+                        SELECT 1
+                          FROM team_project_members pm
+                          JOIN team_projects tp ON tp.id = pm.project_id
+                         WHERE pm.project_id = cp.team_project_id
+                           AND pm.user_id = ?
+                           AND tp.deleted_at IS NULL
+                      )
+                    )
+                 )
+               OR (
+                 f.team_project_id IS NOT NULL
+                 AND EXISTS (
+                   SELECT 1
+                     FROM team_project_members pm
+                     JOIN team_projects tp ON tp.id = pm.project_id
+                    WHERE pm.project_id = f.team_project_id
+                      AND pm.user_id = ?
+                      AND tp.deleted_at IS NULL
+                 )
+               )
+             )
+           ORDER BY (
+                      f.project_id IS NULL
+                      AND f.team_project_id IS NULL
+                      AND f.owner_user_id = ?
+                    ) DESC,
+                    f.updated_at DESC
+           LIMIT 1`;
 }

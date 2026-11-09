@@ -8,6 +8,7 @@ export type UploadedFile = { url: string; storageKey: string; bytes: number; mim
 type MediaUploadOptions = {
     area?: FileArea;
     projectId?: string;
+    teamProjectId?: string;
 };
 
 function mediaKind(prefix: string, blob: Blob) {
@@ -26,6 +27,7 @@ export async function uploadMediaFile(input: string | Blob, prefix = "file", opt
     const uploaded = await uploadCanvasFile(blob, {
         area: options.area || "input",
         projectId: options.projectId,
+        teamProjectId: options.teamProjectId,
         storageKey,
         kind: mediaKind(prefix, blob),
         width: meta.width,
@@ -61,11 +63,12 @@ export async function getMediaBlob(storageKey: string) {
     }
 }
 
-export async function setMediaBlob(storageKey: string, blob: Blob) {
+export async function setMediaBlob(storageKey: string, blob: Blob, options?: { teamProjectId?: string }) {
     await uploadCanvasFile(blob, {
         area: "input",
         storageKey,
         kind: mediaKind(storageKey.split(":")[0] || "file", blob),
+        teamProjectId: options?.teamProjectId,
     });
     return canvasFileUrl(storageKey);
 }

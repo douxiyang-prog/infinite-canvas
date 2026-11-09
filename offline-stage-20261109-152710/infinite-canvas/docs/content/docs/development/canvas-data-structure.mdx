@@ -1,0 +1,77 @@
+---
+title: Canvas Data Structure
+description: Server-backed canvas storage, nodes, media files, and cleanup
+---
+
+# Canvas Data Structure
+
+## Storage
+
+Canvas projects and My Assets are server-backed. Each project is written to `users/<userId>/projects/<projectId>/project.json`, and each user's asset catalog is written to `users/<userId>/assets/assets.json` under the configured storage root. MySQL stores project indexes and versions, while uploaded media is indexed in `canvas_files`.
+
+Global AI channels remain in `system_settings`. Per-user access is stored in `user_channel_assignments`; `all_channels=1` includes every current and future global channel for that account.
+
+The frontend only keeps thumbnails, generation history, and legacy asset data in `localForage`. A legacy `infinite-canvas:asset_store` entry is imported into the signed-in user's server-side catalog and removed after a successful import.
+
+## Project
+
+```ts
+type CanvasProject = {
+  id: string;
+  title: string;
+  createdAt: string;
+  updatedAt: string;
+  nodes: CanvasNodeData[];
+  connections: CanvasConnection[];
+  chatSessions: CanvasAssistantSession[];
+  activeChatId: string | null;
+  backgroundMode: "lines" | "dots" | "blank";
+  viewport: { x: number; y: number; k: number };
+};
+```
+
+The viewport stores screen translation in `x` and `y`, and scale in `k`.
+
+## Nodes and edges
+
+```ts
+type CanvasNodeData = {
+  id: string;
+  type: "image" | "text" | "config" | "video";
+  title: string;
+  position: { x: number; y: number };
+  width: number;
+  height: number;
+  metadata?: CanvasNodeMetadata;
+};
+
+type CanvasConnection = {
+  id: string;
+  fromNodeId: string;
+  toNodeId: string;
+};
+```
+
+Node positions and sizes use canvas-world coordinates. Edges store only node IDs; their paths are calculated while rendering. Deleting a node removes its connected edges.
+
+Common metadata includes content, prompt, status, generation mode, model, size, count, natural dimensions, image results, input order, `storageKey`, MIME type, byte size, and for in-progress OpenAI-style videos a `videoTaskId` used to resume status polling after refresh. A multi-image generation remains one image node: `images` creates all requested slots before generation starts and records each slot's `status`, `errorDetails`, and completed image data. `primaryImageId` selects the result mirrored by the node-level `content` and image metadata; the first successful slot becomes primary immediately. Persisted image and video `content` values use `/api/files/...` URLs, with `storageKey` as the persistent media identity.
+
+## Assistant sessions
+
+```ts
+type CanvasAssistantSession = {
+  id: string;
+  title: string;
+  messages: CanvasAssistantMessage[];
+  createdAt: string;
+  updatedAt: string;
+};
+```
+
+Message references and generated images use the same blob-storage rules. They are converted to data URLs temporarily only when an AI endpoint requires base64.
+
+## Media lifecycle
+
+`uploadImage()` accepts a Blob, data URL, or remote URL. It downloads remote data once, verifies that the Blob decodes as an image, uploads it through `/api/files` under an `image:<id>` key, and returns the server file URL plus metadata. If CORS blocks byte access but the browser can still display the remote image, it returns that URL without a storage key.
+
+Deleting an asset removes its entry from the server-side asset catalog without deleting media that may still be shared by a canvas or generation history. Physical media cleanup is owned by server-side garbage collection.

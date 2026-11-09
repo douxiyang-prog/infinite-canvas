@@ -26,6 +26,7 @@ export async function migrate() {
     "001_users.sql",
     "002_storage.sql",
     "003_user_channels.sql",
+    "004_team_projects.sql",
   ]) {
     const schema = await Bun.file(
       new URL(`../sql/${migration}`, import.meta.url),
@@ -37,12 +38,28 @@ export async function migrate() {
       .filter(Boolean);
     for (const statement of statements) await db.query(statement);
   }
-  const [columns] = await db.query<
-    Array<RowDataPacket & { Field: string }>
-  >("SHOW COLUMNS FROM app_settings LIKE 'login_background'");
+  const [columns] = await db.query<Array<RowDataPacket & { Field: string }>>(
+    "SHOW COLUMNS FROM app_settings LIKE 'login_background'",
+  );
   if (!columns.length) {
     await db.query(
       "ALTER TABLE app_settings ADD COLUMN login_background VARCHAR(20) NOT NULL DEFAULT 'original' AFTER company_name",
+    );
+  }
+  const [canvasProjectColumns] = await db.query<
+    Array<RowDataPacket & { Field: string }>
+  >("SHOW COLUMNS FROM canvas_projects LIKE 'team_project_id'");
+  if (!canvasProjectColumns.length) {
+    await db.query(
+      "ALTER TABLE canvas_projects ADD COLUMN team_project_id VARCHAR(32) NULL AFTER owner_user_id, ADD KEY idx_canvas_projects_team_project (team_project_id, updated_at)",
+    );
+  }
+  const [canvasFileColumns] = await db.query<
+    Array<RowDataPacket & { Field: string }>
+  >("SHOW COLUMNS FROM canvas_files LIKE 'team_project_id'");
+  if (!canvasFileColumns.length) {
+    await db.query(
+      "ALTER TABLE canvas_files ADD COLUMN team_project_id VARCHAR(32) NULL AFTER project_id, ADD KEY idx_canvas_files_team_project (team_project_id, area)",
     );
   }
 }

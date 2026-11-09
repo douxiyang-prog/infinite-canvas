@@ -48,18 +48,18 @@ import {
   loadProject,
   saveProject,
 } from "./projects";
-import {
-  createPublicFileUrl,
-  getFile,
-  getPublicFile,
-  saveFile,
-} from "./files";
+import { createPublicFileUrl, getFile, getPublicFile, saveFile } from "./files";
 import {
   createAsset,
+  createTeamAsset,
   deleteAsset,
+  deleteTeamAsset,
   importAssets,
+  importTeamAssets,
   listAssets,
+  listTeamAssets,
   replaceAssets,
+  updateTeamAsset,
   updateAsset,
 } from "./assets";
 import { purgeExpiredTrash, restoreProject } from "./trash";
@@ -69,6 +69,15 @@ import {
   getUserChannelAssignment,
   saveUserChannelAssignment,
 } from "./user-channels";
+import {
+  createTeamProject,
+  deleteTeamProject,
+  assertTeamProjectMember,
+  listAdminTeamProjects,
+  listMemberTeamProjects,
+  replaceTeamProjectMembers,
+  updateTeamProject,
+} from "./team-projects";
 
 function roleValue(value: unknown, fallback?: UserRole): UserRole | undefined {
   if (value === undefined) return fallback;
@@ -93,8 +102,7 @@ function optionalNumberField(
   const value = body[key];
   if (value === undefined) return fallback;
   const parsed = Number(value);
-  if (!Number.isFinite(parsed))
-    throw new HttpError(400, `${key} 必须是数字`);
+  if (!Number.isFinite(parsed)) throw new HttpError(400, `${key} 必须是数字`);
   return parsed;
 }
 
@@ -167,11 +175,7 @@ async function handleApi(request: Request, url: URL) {
       {
         maxUploadMb: optionalNumberField(body, "maxUploadMb", 500),
         autosaveMs: optionalNumberField(body, "autosaveMs", 1500),
-        trashRetentionDays: optionalNumberField(
-          body,
-          "trashRetentionDays",
-          14,
-        ),
+        trashRetentionDays: optionalNumberField(body, "trashRetentionDays", 14),
       },
       user.id,
     );
@@ -205,24 +209,17 @@ async function handleApi(request: Request, url: URL) {
     return json(await replaceAssets(user.id, body.assets));
   }
 
-  if (
-    request.method === "POST" &&
-    url.pathname === "/api/assets/import"
-  ) {
+  if (request.method === "POST" && url.pathname === "/api/assets/import") {
     const user = await requireUser(request);
     const body = await readJson(request);
     return json(await importAssets(user.id, body.assets));
   }
 
-  const assetMatch = url.pathname.match(
-    /^\/api\/assets\/([A-Za-z0-9_-]+)$/,
-  );
+  const assetMatch = url.pathname.match(/^\/api\/assets\/([A-Za-z0-9_-]+)$/);
   if (assetMatch && request.method === "PUT") {
     const user = await requireUser(request);
     const body = await readJson(request);
-    return json(
-      await updateAsset(user.id, assetMatch[1], body.asset),
-    );
+    return json(await updateAsset(user.id, assetMatch[1], body.asset));
   }
 
   if (assetMatch && request.method === "DELETE") {
@@ -230,7 +227,9 @@ async function handleApi(request: Request, url: URL) {
     return json(await deleteAsset(user.id, assetMatch[1]));
   }
 
-  const projectMatch = url.pathname.match(/^\/api\/projects\/([A-Za-z0-9_-]+)$/);
+  const projectMatch = url.pathname.match(
+    /^\/api\/projects\/([A-Za-z0-9_-]+)$/,
+  );
   if (projectMatch) {
     const user = await requireUser(request);
     const projectId = projectMatch[1];
@@ -254,7 +253,9 @@ async function handleApi(request: Request, url: URL) {
     }
   }
 
-  const restoreMatch = url.pathname.match(/^\/api\/projects\/([A-Za-z0-9_-]+)\/restore$/);
+  const restoreMatch = url.pathname.match(
+    /^\/api\/projects\/([A-Za-z0-9_-]+)\/restore$/,
+  );
   if (restoreMatch && request.method === "POST") {
     const user = await requireUser(request);
     return json(await restoreProject(user.id, restoreMatch[1]));
@@ -271,7 +272,9 @@ async function handleApi(request: Request, url: URL) {
   if (request.method === "GET" && url.pathname === "/api/files/public-url") {
     const user = await requireUser(request);
     const storageKey = url.searchParams.get("storageKey")?.trim() || "";
-    return json({ url: await createPublicFileUrl(user.id, storageKey, request) });
+    return json({
+      url: await createPublicFileUrl(user.id, storageKey, request),
+    });
   }
 
   const publicFileMatch = url.pathname.match(/^\/api\/public\/files\/([^/]+)$/);
@@ -279,17 +282,11 @@ async function handleApi(request: Request, url: URL) {
     publicFileMatch &&
     (request.method === "GET" || request.method === "HEAD")
   ) {
-    return getPublicFile(
-      decodeURIComponent(publicFileMatch[1]),
-      request,
-    );
+    return getPublicFile(decodeURIComponent(publicFileMatch[1]), request);
   }
 
   const fileMatch = url.pathname.match(/^\/api\/files\/([^/]+)$/);
-  if (
-    fileMatch &&
-    (request.method === "GET" || request.method === "HEAD")
-  ) {
+  if (fileMatch && (request.method === "GET" || request.method === "HEAD")) {
     const user = await requireUser(request);
     return getFile(user.id, decodeURIComponent(fileMatch[1]), request);
   }
@@ -362,6 +359,122 @@ async function handleApi(request: Request, url: URL) {
     return json({ users: await listUsers() });
   }
 
+  if (request.method === "GET" && url.pathname === "/api/team-projects") {
+    const user = await requireUser(request);
+    return json({ projects: await listMemberTeamProjects(user.id) });
+  }
+
+  const teamAssetsMatch = url.pathname.match(
+    /^\/api\/team-projects\/([A-Za-z0-9_-]+)\/assets$/,
+  );
+  if (teamAssetsMatch) {
+    const user = await requireUser(request);
+    const teamProjectId = teamAssetsMatch[1];
+    await assertTeamProjectMember(teamProjectId, user.id);
+    if (request.method === "GET")
+      return json(await listTeamAssets(teamProjectId));
+    if (request.method === "POST") {
+      const body = await readJson(request);
+      return json(
+        await createTeamAsset(teamProjectId, body.asset),
+        201,
+      );
+    }
+  }
+
+  const teamAssetImportMatch = url.pathname.match(
+    /^\/api\/team-projects\/([A-Za-z0-9_-]+)\/assets\/import$/,
+  );
+  if (teamAssetImportMatch && request.method === "POST") {
+    const user = await requireUser(request);
+    await assertTeamProjectMember(teamAssetImportMatch[1], user.id);
+    const body = await readJson(request);
+    return json(
+      await importTeamAssets(teamAssetImportMatch[1], body.assets),
+    );
+  }
+
+  const teamAssetItemMatch = url.pathname.match(
+    /^\/api\/team-projects\/([A-Za-z0-9_-]+)\/assets\/([A-Za-z0-9_-]+)$/,
+  );
+  if (teamAssetItemMatch) {
+    const user = await requireUser(request);
+    await assertTeamProjectMember(teamAssetItemMatch[1], user.id);
+    if (request.method === "PUT") {
+      const body = await readJson(request);
+      return json(
+        await updateTeamAsset(
+          teamAssetItemMatch[1],
+          teamAssetItemMatch[2],
+          body.asset,
+        ),
+      );
+    }
+    if (request.method === "DELETE")
+      return json(
+        await deleteTeamAsset(
+          teamAssetItemMatch[1],
+          teamAssetItemMatch[2],
+        ),
+      );
+  }
+
+  if (request.method === "GET" && url.pathname === "/api/admin/team-projects") {
+    await requireAdmin(request);
+    return json({ projects: await listAdminTeamProjects() });
+  }
+
+  if (
+    request.method === "POST" &&
+    url.pathname === "/api/admin/team-projects"
+  ) {
+    const user = await requireAdmin(request);
+    const body = await readJson(request);
+    return json(
+      {
+        project: await createTeamProject(user.id, {
+          title: body.title,
+          description: body.description,
+          userIds: body.userIds,
+        }),
+      },
+      201,
+    );
+  }
+
+  const teamProjectMatch = url.pathname.match(
+    /^\/api\/admin\/team-projects\/([A-Za-z0-9_-]+)$/,
+  );
+  if (teamProjectMatch) {
+    await requireAdmin(request);
+    const teamProjectId = teamProjectMatch[1];
+    if (request.method === "PATCH") {
+      const body = await readJson(request);
+      return json({
+        project: await updateTeamProject(teamProjectId, {
+          title: body.title,
+          description: body.description,
+        }),
+      });
+    }
+    if (request.method === "DELETE")
+      return json(await deleteTeamProject(teamProjectId));
+  }
+
+  const teamProjectMembersMatch = url.pathname.match(
+    /^\/api\/admin\/team-projects\/([A-Za-z0-9_-]+)\/members$/,
+  );
+  if (teamProjectMembersMatch && request.method === "PUT") {
+    await requireAdmin(request);
+    const body = await readJson(request);
+    return json({
+      project: await replaceTeamProjectMembers(
+        teamProjectMembersMatch[1],
+        body.userIds,
+      ),
+    });
+  }
+
   if (request.method === "PATCH" && url.pathname === "/api/admin/branding") {
     await requireAdmin(request);
     const body = await readJson(request);
@@ -414,16 +527,14 @@ async function handleApi(request: Request, url: URL) {
   if (userChannelsMatch && request.method === "GET") {
     await requireAdmin(request);
     const targetId = Number(userChannelsMatch[1]);
-    if (!(await findUserById(targetId)))
-      throw new HttpError(404, "用户不存在");
+    if (!(await findUserById(targetId))) throw new HttpError(404, "用户不存在");
     return json(await getUserChannelAssignment(targetId));
   }
 
   if (userChannelsMatch && request.method === "PUT") {
     const current = await requireAdmin(request);
     const targetId = Number(userChannelsMatch[1]);
-    if (!(await findUserById(targetId)))
-      throw new HttpError(404, "用户不存在");
+    if (!(await findUserById(targetId))) throw new HttpError(404, "用户不存在");
     const body = await readJson(request);
     return json(
       await saveUserChannelAssignment(
@@ -496,10 +607,17 @@ const server = Bun.serve({
 });
 console.log(`Canvas API listening on http://0.0.0.0:${server.port}`);
 
-void purgeExpiredTrash().catch((error) => console.error("Trash cleanup failed", error));
-const trashTimer = setInterval(() => {
-  void purgeExpiredTrash().catch((error) => console.error("Trash cleanup failed", error));
-}, 60 * 60 * 1000);
+void purgeExpiredTrash().catch((error) =>
+  console.error("Trash cleanup failed", error),
+);
+const trashTimer = setInterval(
+  () => {
+    void purgeExpiredTrash().catch((error) =>
+      console.error("Trash cleanup failed", error),
+    );
+  },
+  60 * 60 * 1000,
+);
 
 process.on("SIGTERM", async () => {
   clearInterval(trashTimer);

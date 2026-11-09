@@ -11,6 +11,8 @@ import { DOCS_URL } from "@/constant/env";
 
 export function CanvasTopBar({
     title,
+    contextLabel,
+    projectsLabel,
     titleDraft,
     isTitleEditing,
     onTitleDraftChange,
@@ -33,6 +35,8 @@ export function CanvasTopBar({
     onToggleAgent,
 }: {
     title: string;
+    contextLabel?: string | null;
+    projectsLabel?: string;
     titleDraft: string;
     isTitleEditing: boolean;
     onTitleDraftChange: (value: string) => void;
@@ -57,6 +61,7 @@ export function CanvasTopBar({
     const colorTheme = useThemeStore((state) => state.theme);
     const { t } = useTranslation();
     const theme = canvasThemes[colorTheme];
+    const collectionLabel = projectsLabel || t("canvas.projects");
     const titleRef = useRef<HTMLDivElement>(null);
     const [shortcutsOpen, setShortcutsOpen] = useState(false);
     const sidePanelOpen = useCanvasSidePanelStore((state) => state.panelOpen);
@@ -92,7 +97,7 @@ export function CanvasTopBar({
                             items: [
                                 { key: "home", icon: <Home className="size-4" />, label: t("canvas.home"), onClick: onHome },
                                 { key: "docs", icon: <BookOpen className="size-4" />, label: t("canvas.docs"), onClick: () => window.open(DOCS_URL, "_blank", "noopener,noreferrer") },
-                                { key: "projects", icon: <Images className="size-4" />, label: t("canvas.projects"), onClick: onProjects },
+                                { key: "projects", icon: <Images className="size-4" />, label: collectionLabel, onClick: onProjects },
                                 { type: "divider" },
                                 { key: "new", icon: <Plus className="size-4" />, label: t("canvas.create"), onClick: onCreateProject },
                                 { key: "delete", danger: true, icon: <Trash2 className="size-4" />, label: t("canvas.deleteCurrent"), onClick: onDeleteProject },
@@ -111,6 +116,7 @@ export function CanvasTopBar({
                     </Dropdown>
 
                     <div ref={titleRef} className="flex min-w-0 items-center gap-2">
+                        {contextLabel ? <span className="max-w-32 truncate text-xs opacity-50">{contextLabel} /</span> : null}
                         {isTitleEditing ? (
                             <input
                                 autoFocus
@@ -139,7 +145,7 @@ export function CanvasTopBar({
                     <span className="mx-1 hidden h-5 w-px shrink-0 @min-[700px]:block" style={{ background: theme.toolbar.border }} />
                     <div className="hidden min-w-0 items-center gap-0.5 @min-[700px]:flex @min-[1150px]:hidden" role="toolbar" aria-label={t("canvas.openMenu")}>
                         <CanvasMenuButton icon={<Home className="size-3.5" />} label={t("canvas.home")} onClick={onHome} iconOnly />
-                        <CanvasMenuButton icon={<Images className="size-3.5" />} label={t("canvas.projects")} onClick={onProjects} iconOnly />
+                        <CanvasMenuButton icon={<Images className="size-3.5" />} label={collectionLabel} onClick={onProjects} iconOnly />
                         <span className="mx-1 h-4 w-px shrink-0" style={{ background: theme.toolbar.border }} />
                         <CanvasMenuButton icon={<Plus className="size-3.5" />} label={t("canvas.toolbarCreate")} onClick={onCreateProject} iconOnly />
                         <CanvasMenuButton icon={<Trash2 className="size-3.5" />} label={t("canvas.toolbarDelete")} onClick={onDeleteProject} danger iconOnly />
@@ -151,7 +157,7 @@ export function CanvasTopBar({
                     </div>
                     <div className="hidden min-w-0 items-center gap-0.5 @min-[1150px]:flex" role="toolbar" aria-label={t("canvas.openMenu")}>
                         <CanvasMenuButton icon={<Home className="size-3.5" />} label={t("canvas.home")} onClick={onHome} />
-                        <CanvasMenuButton icon={<Images className="size-3.5" />} label={t("canvas.projects")} onClick={onProjects} />
+                        <CanvasMenuButton icon={<Images className="size-3.5" />} label={collectionLabel} onClick={onProjects} />
                         <span className="mx-1 h-4 w-px shrink-0" style={{ background: theme.toolbar.border }} />
                         <CanvasMenuButton icon={<Plus className="size-3.5" />} label={t("canvas.toolbarCreate")} onClick={onCreateProject} />
                         <CanvasMenuButton icon={<Trash2 className="size-3.5" />} label={t("canvas.toolbarDelete")} onClick={onDeleteProject} danger />

@@ -1,9 +1,11 @@
 import { apiRequest } from "@/services/api/auth";
 import type { CanvasProject } from "@/stores/canvas/use-canvas-store";
+import type { TeamProject } from "@/types/team-project";
 
 export type ProjectListResponse = {
     projects: CanvasProject[];
     versions: Record<string, number>;
+    teamProjects: TeamProject[];
 };
 
 export function fetchProjects() {
