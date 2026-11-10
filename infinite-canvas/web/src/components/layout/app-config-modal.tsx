@@ -6,11 +6,15 @@ import { useTranslation } from "react-i18next";
 
 import { ModelPicker } from "@/components/model-picker";
 import { videoResolutionOptions } from "@/components/video-settings-panel";
+import { BrandingSettings } from "@/components/layout/branding-settings";
 import { ChannelEditorDrawer } from "@/components/layout/channel-editor-drawer";
 import { ConfigLocalProxy } from "@/components/layout/config-local-proxy";
 import { ConfigPromptSources } from "@/components/layout/config-prompt-sources";
 import { ConfigLocalStorage } from "@/components/layout/config-local-storage";
 import { ConfigServerStorage } from "@/components/layout/config-server-storage";
+import { ProjectSceneSettings } from "@/components/layout/project-scene-settings";
+import { AdminUserChannelsPanel } from "@/pages/admin/user-channels";
+import { AdminUsersPanel } from "@/pages/admin/users";
 import type { AppLocale } from "@/i18n";
 import { exportAppConfig, importAppConfig } from "@/services/config-file";
 import { syncAppDataToWebdav, type AppSyncDomainKey, type AppSyncProgressEvent } from "@/services/app-sync";
@@ -51,7 +55,17 @@ function createWebdavDomainProgress(): Record<AppSyncDomainKey, WebdavDomainProg
     );
 }
 
-export function AppConfigPanel({ showDoneButton = false, initialTab = "channels" }: { showDoneButton?: boolean; initialTab?: ConfigTabKey }) {
+export function AppConfigPanel({
+    showDoneButton = false,
+    showAdminTabs = false,
+    initialTab = "channels",
+    onTabChange,
+}: {
+    showDoneButton?: boolean;
+    showAdminTabs?: boolean;
+    initialTab?: ConfigTabKey;
+    onTabChange?: (tab: ConfigTabKey) => void;
+}) {
     const { message } = App.useApp();
     const { i18n, t } = useTranslation();
     const configInputRef = useRef<HTMLInputElement>(null);
@@ -184,7 +198,11 @@ export function AppConfigPanel({ showDoneButton = false, initialTab = "channels"
             </div>
             <Tabs
                 activeKey={activeTab}
-                onChange={(key) => setActiveTab(key as ConfigTabKey)}
+                onChange={(key) => {
+                    const tab = key as ConfigTabKey;
+                    setActiveTab(tab);
+                    onTabChange?.(tab);
+                }}
                 items={[
                     {
                         key: "channels",
@@ -357,8 +375,32 @@ export function AppConfigPanel({ showDoneButton = false, initialTab = "channels"
                         ? [
                               {
                                   key: "server-storage" as const,
-                                  label: locale === "zh-CN" ? "服务端存储" : "Server storage",
+                                  label: t("config.tabs.serverStorage"),
                                   children: <ConfigServerStorage />,
+                              },
+                          ]
+                        : []),
+                    ...(showAdminTabs && user?.role === "admin"
+                        ? [
+                              {
+                                  key: "project-scenes" as const,
+                                  label: t("config.tabs.projectScenes"),
+                                  children: <ProjectSceneSettings />,
+                              },
+                              {
+                                  key: "branding" as const,
+                                  label: t("config.tabs.branding"),
+                                  children: <BrandingSettings />,
+                              },
+                              {
+                                  key: "users" as const,
+                                  label: t("config.tabs.users"),
+                                  children: <AdminUsersPanel />,
+                              },
+                              {
+                                  key: "user-channels" as const,
+                                  label: t("config.tabs.userChannels"),
+                                  children: <AdminUserChannelsPanel />,
                               },
                           ]
                         : []),

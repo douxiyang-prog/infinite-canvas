@@ -4,6 +4,15 @@ export type TeamProjectMember = {
     displayName: string;
 };
 
+export type TeamProjectScene = {
+    id: string;
+    title: string;
+    hidden: boolean;
+    sortOrder: number;
+    createdAt: string;
+    updatedAt: string;
+};
+
 export type TeamProject = {
     id: string;
     title: string;
@@ -13,4 +22,5 @@ export type TeamProject = {
     updatedAt: string;
     canvasCount: number;
     members: TeamProjectMember[];
+    scenes: TeamProjectScene[];
 };

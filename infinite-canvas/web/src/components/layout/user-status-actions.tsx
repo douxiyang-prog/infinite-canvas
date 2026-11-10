@@ -1,11 +1,12 @@
 import type { CSSProperties } from "react";
 import { Dropdown, Tooltip } from "antd";
 import type { MenuProps } from "antd";
-import { Keyboard, LogOut, Puzzle, RadioTower, Settings2, SlidersHorizontal, Users } from "lucide-react";
+import { Keyboard, LogOut, Puzzle, Settings2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 
 import { AnimatedThemeToggler } from "@/components/ui/animated-theme-toggler";
+import { NewApiCreditBadge } from "@/components/layout/new-api-credit-badge";
 import { VersionReleaseModal } from "@/components/layout/version-release-modal";
 import { changeAppLocale, type AppLocale } from "@/i18n";
 import { canvasThemes } from "@/lib/canvas-theme";
@@ -49,25 +50,13 @@ export function UserStatusActions({ showConfig = true, variant = "default", onOp
                   ),
               },
               { type: "divider" },
-              ...(user.role === "admin"
-                  ? [
-                        {
-                            type: "group" as const,
-                            label: "管理",
-                            children: [
-                                { key: "users", icon: <Users className="size-4" />, label: "用户管理", onClick: () => navigate("/admin/users") },
-                                { key: "user-channels", icon: <RadioTower className="size-4" />, label: "用户渠道配置", onClick: () => navigate("/admin/user-channels") },
-                                { key: "global", icon: <SlidersHorizontal className="size-4" />, label: "全局管理", onClick: () => navigate("/admin/settings") },
-                            ],
-                        },
-                    ]
-                  : []),
               { key: "logout", icon: <LogOut className="size-4" />, label: "退出登录", onClick: () => void logout() },
           ]
         : [];
 
     return (
         <div className="inline-flex shrink-0 items-center gap-1">
+            <NewApiCreditBadge variant={variant} />
             {user ? (
                 <Dropdown menu={{ items: accountItems }} trigger={["click"]} placement="bottomRight">
                     <button

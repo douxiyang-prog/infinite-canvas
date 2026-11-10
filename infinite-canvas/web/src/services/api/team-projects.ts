@@ -1,5 +1,5 @@
 import { apiRequest } from "@/services/api/auth";
-import type { TeamProject } from "@/types/team-project";
+import type { TeamProject, TeamProjectScene } from "@/types/team-project";
 
 export async function fetchAdminTeamProjects() {
     return (await apiRequest<{ projects: TeamProject[] }>("/api/admin/team-projects")).projects;
@@ -38,6 +38,30 @@ export async function replaceAdminTeamProjectMembers(id: string, userIds: number
 
 export function deleteAdminTeamProject(id: string) {
     return apiRequest<{ deleted: true }>(`/api/admin/team-projects/${encodeURIComponent(id)}`, {
+        method: "DELETE",
+    });
+}
+
+export async function createAdminTeamProjectScene(teamProjectId: string, title: string) {
+    return (
+        await apiRequest<{ scene: TeamProjectScene }>("/api/admin/team-project-scenes", {
+            method: "POST",
+            body: JSON.stringify({ teamProjectId, title }),
+        })
+    ).scene;
+}
+
+export async function updateAdminTeamProjectScene(id: string, input: { title?: string; hidden?: boolean; sortOrder?: number }) {
+    return (
+        await apiRequest<{ scene: TeamProjectScene }>(`/api/admin/team-project-scenes/${encodeURIComponent(id)}`, {
+            method: "PATCH",
+            body: JSON.stringify(input),
+        })
+    ).scene;
+}
+
+export function deleteAdminTeamProjectScene(id: string) {
+    return apiRequest<{ deleted: true; id: string }>(`/api/admin/team-project-scenes/${encodeURIComponent(id)}`, {
         method: "DELETE",
     });
 }

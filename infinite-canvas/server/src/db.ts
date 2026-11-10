@@ -27,6 +27,7 @@ export async function migrate() {
     "002_storage.sql",
     "003_user_channels.sql",
     "004_team_projects.sql",
+    "005_project_scenes.sql",
   ]) {
     const schema = await Bun.file(
       new URL(`../sql/${migration}`, import.meta.url),
@@ -60,6 +61,14 @@ export async function migrate() {
   if (!canvasFileColumns.length) {
     await db.query(
       "ALTER TABLE canvas_files ADD COLUMN team_project_id VARCHAR(32) NULL AFTER project_id, ADD KEY idx_canvas_files_team_project (team_project_id, area)",
+    );
+  }
+  const [sceneColumn] = await db.query<
+    Array<RowDataPacket & { Field: string }>
+  >("SHOW COLUMNS FROM canvas_projects LIKE 'scene_id'");
+  if (!sceneColumn.length) {
+    await db.query(
+      "ALTER TABLE canvas_projects ADD COLUMN scene_id VARCHAR(32) NULL AFTER team_project_id, ADD KEY idx_canvas_projects_scene (scene_id, updated_at)",
     );
   }
 }

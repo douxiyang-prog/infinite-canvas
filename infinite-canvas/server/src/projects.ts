@@ -7,6 +7,7 @@ import { db } from "./db";
 import { HttpError } from "./http";
 import { requireStorageSettings, resolveStoragePath } from "./storage";
 import {
+  assertSceneAvailable,
   assertTeamProjectMember,
   listMemberTeamProjects,
 } from "./team-projects";
@@ -20,6 +21,7 @@ type ProjectRow = RowDataPacket & {
   id: string;
   owner_user_id: number;
   team_project_id: string | null;
+  scene_id: string | null;
   title: string;
   storage_path: string;
   version: number;
@@ -60,6 +62,7 @@ function projectWithAccess(row: ProjectRow, value: Record<string, unknown>) {
     ...value,
     scope: teamProjectId ? "project" : "personal",
     teamProjectId,
+    sceneId: row.scene_id || null,
     teamProjectTitle: row.team_project_title || null,
     ownerDisplayName: row.owner_display_name || null,
   };
@@ -76,7 +79,7 @@ async function assertCanvasAccess(row: ProjectRow, userId: number) {
 
 async function accessibleCanvasRow(userId: number, projectId: string) {
   const [rows] = await db.execute<ProjectRow[]>(
-    `SELECT cp.id, cp.owner_user_id, cp.team_project_id, cp.title, cp.storage_path,
+    `SELECT cp.id, cp.owner_user_id, cp.team_project_id, cp.scene_id, cp.title, cp.storage_path,
             cp.version, cp.deleted_at, cp.updated_at,
             owner.display_name AS owner_display_name,
             tp.title AS team_project_title
@@ -150,7 +153,7 @@ async function readProjectFile(row: ProjectRow, root: string) {
 export async function listProjects(userId: number) {
   const settings = await requireStorageSettings();
   const [rows] = await db.execute<ProjectRow[]>(
-    `SELECT cp.id, cp.owner_user_id, cp.team_project_id, cp.title, cp.storage_path,
+    `SELECT cp.id, cp.owner_user_id, cp.team_project_id, cp.scene_id, cp.title, cp.storage_path,
             cp.version, cp.deleted_at, cp.updated_at,
             owner.display_name AS owner_display_name,
             tp.title AS team_project_title
@@ -203,7 +206,7 @@ export async function saveProject(
   const settings = await requireStorageSettings();
   return withProjectLock(projectId, async () => {
     const [rows] = await db.execute<ProjectRow[]>(
-      `SELECT id, owner_user_id, team_project_id, title, storage_path, version, deleted_at, updated_at
+      `SELECT id, owner_user_id, team_project_id, scene_id, title, storage_path, version, deleted_at, updated_at
          FROM canvas_projects
         WHERE id = ?
         LIMIT 1`,
@@ -221,6 +224,7 @@ export async function saveProject(
     if (current?.deleted_at) throw new HttpError(410, "画布已删除");
 
     let teamProjectId = current?.team_project_id || null;
+    let sceneId = current?.scene_id || null;
     if (!current) {
       const requestedTeamProject = project.teamProjectId;
       if (
@@ -243,11 +247,24 @@ export async function saveProject(
         await assertTeamProjectMember(requestedTeamProject.trim(), userId);
         teamProjectId = requestedTeamProject.trim();
       }
+      const requestedScene = project.sceneId;
+      if (requestedScene !== undefined && requestedScene !== null) {
+        if (typeof requestedScene !== "string" || !requestedScene.trim())
+          throw new HttpError(400, "场次 ID 格式不正确");
+        if (!teamProjectId) throw new HttpError(400, "无场次画布不能指定场次");
+        validId(requestedScene.trim());
+        await assertSceneAvailable(
+          teamProjectId,
+          requestedScene.trim(),
+        );
+        sceneId = requestedScene.trim();
+      }
     }
     const storedProject = {
       ...project,
       scope: teamProjectId ? "project" : "personal",
       teamProjectId,
+      sceneId,
     };
 
     const version = currentVersion + 1;
@@ -283,8 +300,8 @@ export async function saveProject(
       await rename(tempPath, filePath);
       await db.execute<ResultSetHeader>(
         `INSERT INTO canvas_projects
-           (id, owner_user_id, team_project_id, title, storage_path, version, content_sha256, size_bytes)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+           (id, owner_user_id, team_project_id, scene_id, title, storage_path, version, content_sha256, size_bytes)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
          ON DUPLICATE KEY UPDATE
            title = VALUES(title),
            storage_path = VALUES(storage_path),
@@ -296,6 +313,7 @@ export async function saveProject(
           projectId,
           userId,
           teamProjectId,
+          sceneId,
           String(project.title).trim().slice(0, 200),
           relativePath,
           version,
@@ -323,7 +341,7 @@ export async function deleteProject(
   const settings = await requireStorageSettings();
   return withProjectLock(projectId, async () => {
     const [rows] = await db.execute<ProjectRow[]>(
-      `SELECT id, owner_user_id, team_project_id, title, storage_path, version, deleted_at, updated_at
+      `SELECT id, owner_user_id, team_project_id, scene_id, title, storage_path, version, deleted_at, updated_at
          FROM canvas_projects
         WHERE id = ? AND deleted_at IS NULL
         LIMIT 1`,

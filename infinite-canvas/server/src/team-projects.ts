@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import type { RowDataPacket } from "mysql2";
+import type { ResultSetHeader, RowDataPacket } from "mysql2";
 
 import { db } from "./db";
 import { HttpError } from "./http";
@@ -8,6 +8,15 @@ export type TeamProjectMember = {
   userId: number;
   username: string;
   displayName: string;
+};
+
+export type TeamProjectSceneSummary = {
+  id: string;
+  title: string;
+  hidden: boolean;
+  sortOrder: number;
+  createdAt: string;
+  updatedAt: string;
 };
 
 export type TeamProjectSummary = {
@@ -19,6 +28,7 @@ export type TeamProjectSummary = {
   updatedAt: string;
   canvasCount: number;
   members: TeamProjectMember[];
+  scenes: TeamProjectSceneSummary[];
 };
 
 type ProjectRow = RowDataPacket & {
@@ -40,6 +50,16 @@ type MemberRow = RowDataPacket & {
 type CountRow = RowDataPacket & {
   team_project_id: string;
   count: number;
+};
+
+type SceneRow = RowDataPacket & {
+  id: string;
+  team_project_id: string;
+  title: string;
+  hidden: number;
+  sort_order: number;
+  created_at: Date | string;
+  updated_at: Date | string;
 };
 
 function iso(value: Date | string) {
@@ -76,6 +96,22 @@ function userIdsValue(value: unknown) {
   return ids;
 }
 
+function sceneTitleValue(value: unknown) {
+  if (typeof value !== "string" || !value.trim())
+    throw new HttpError(400, "场次名称不能为空");
+  return value.trim().slice(0, 200);
+}
+
+async function assertTeamProjectExists(projectId: string) {
+  const [rows] = await db.execute<
+    Array<RowDataPacket & { id: string }>
+  >(
+    "SELECT id FROM team_projects WHERE id = ? AND deleted_at IS NULL LIMIT 1",
+    [projectId],
+  );
+  if (!rows[0]) throw new HttpError(404, "项目不存在");
+}
+
 async function assertUsersExist(userIds: number[]) {
   if (!userIds.length) return;
   const placeholders = userIds.map(() => "?").join(", ");
@@ -104,11 +140,21 @@ async function projectRows(projectId?: string) {
   return rows;
 }
 
+export async function isAdminUser(userId: number) {
+  const [rows] = await db.execute<
+    Array<RowDataPacket & { role: string }>
+  >(
+    "SELECT role FROM users WHERE id = ? AND status = 'active' LIMIT 1",
+    [userId],
+  );
+  return rows[0]?.role === "admin";
+}
+
 async function projectDetails(rows: ProjectRow[]) {
   if (!rows.length) return [] as TeamProjectSummary[];
   const ids = rows.map((row) => row.id);
   const placeholders = ids.map(() => "?").join(", ");
-  const [[memberRows], [countRows]] = await Promise.all([
+  const [[memberRows], [countRows], [sceneRows]] = await Promise.all([
     db.execute<MemberRow[]>(
       `SELECT pm.project_id, u.id AS user_id, u.username, u.display_name
          FROM team_project_members pm
@@ -122,6 +168,13 @@ async function projectDetails(rows: ProjectRow[]) {
          FROM canvas_projects
         WHERE deleted_at IS NULL AND team_project_id IN (${placeholders})
         GROUP BY team_project_id`,
+      ids,
+    ),
+    db.execute<SceneRow[]>(
+      `SELECT id, team_project_id, title, hidden, sort_order, created_at, updated_at
+         FROM team_project_scenes
+        WHERE team_project_id IN (${placeholders})
+        ORDER BY sort_order ASC, created_at ASC, id ASC`,
       ids,
     ),
   ]);
@@ -138,6 +191,19 @@ async function projectDetails(rows: ProjectRow[]) {
   const counts = new Map(
     countRows.map((row) => [row.team_project_id, Number(row.count)]),
   );
+  const scenesByProject = new Map<string, TeamProjectSceneSummary[]>();
+  for (const row of sceneRows) {
+    const scenes = scenesByProject.get(row.team_project_id) || [];
+    scenes.push({
+      id: row.id,
+      title: row.title,
+      hidden: Boolean(row.hidden),
+      sortOrder: Number(row.sort_order),
+      createdAt: iso(row.created_at),
+      updatedAt: iso(row.updated_at),
+    });
+    scenesByProject.set(row.team_project_id, scenes);
+  }
   return rows.map((row) => ({
     id: row.id,
     title: row.title,
@@ -147,6 +213,7 @@ async function projectDetails(rows: ProjectRow[]) {
     updatedAt: iso(row.updated_at),
     canvasCount: counts.get(row.id) || 0,
     members: membersByProject.get(row.id) || [],
+    scenes: scenesByProject.get(row.id) || [],
   }));
 }
 
@@ -298,4 +365,123 @@ export async function assertTeamProjectMember(
 ) {
   if (!(await isTeamProjectMember(projectId, userId)))
     throw new HttpError(404, "项目不存在或无权访问");
+}
+
+export async function createTeamProjectScene(
+  createdBy: number,
+  input: { teamProjectId: unknown; title: unknown },
+) {
+  if (typeof input.teamProjectId !== "string" || !input.teamProjectId.trim())
+    throw new HttpError(400, "项目 ID 格式不正确");
+  const teamProjectId = input.teamProjectId.trim();
+  await assertTeamProjectExists(teamProjectId);
+  const title = sceneTitleValue(input.title);
+  const id = `scene_${randomUUID().replace(/-/g, "").slice(0, 24)}`;
+  const [orderRows] = await db.execute<
+    Array<RowDataPacket & { next_order: number }>
+  >(
+    "SELECT COALESCE(MAX(sort_order), 0) + 1 AS next_order FROM team_project_scenes WHERE team_project_id = ?",
+    [teamProjectId],
+  );
+  await db.execute(
+    `INSERT INTO team_project_scenes
+       (id, team_project_id, title, hidden, sort_order, created_by)
+     VALUES (?, ?, ?, 1, ?, ?)`,
+    [id, teamProjectId, title, Number(orderRows[0]?.next_order || 1), createdBy],
+  );
+  return sceneSummary(id);
+}
+
+export async function updateTeamProjectScene(
+  id: string,
+  input: { title?: unknown; hidden?: unknown; sortOrder?: unknown },
+) {
+  const sets: string[] = [];
+  const values: Array<string | number> = [];
+  if (input.title !== undefined) {
+    sets.push("title = ?");
+    values.push(sceneTitleValue(input.title));
+  }
+  if (input.hidden !== undefined) {
+    if (typeof input.hidden !== "boolean")
+      throw new HttpError(400, "场次隐藏状态格式不正确");
+    sets.push("hidden = ?");
+    values.push(input.hidden ? 1 : 0);
+  }
+  if (input.sortOrder !== undefined) {
+    const sortOrder = Number(input.sortOrder);
+    if (!Number.isSafeInteger(sortOrder) || sortOrder < 0)
+      throw new HttpError(400, "场次排序格式不正确");
+    sets.push("sort_order = ?");
+    values.push(sortOrder);
+  }
+  if (!sets.length) throw new HttpError(400, "没有需要更新的字段");
+  values.push(id);
+  const [result] = await db.execute<ResultSetHeader>(
+    `UPDATE team_project_scenes SET ${sets.join(", ")} WHERE id = ?`,
+    values,
+  );
+  if (!result.affectedRows) throw new HttpError(404, "场次不存在");
+  return sceneSummary(id);
+}
+
+export async function deleteTeamProjectScene(id: string) {
+  const connection = await db.getConnection();
+  try {
+    await connection.beginTransaction();
+    const [scenes] = await connection.execute<SceneRow[]>(
+      `SELECT id, team_project_id, title, hidden, sort_order, created_at, updated_at
+         FROM team_project_scenes WHERE id = ? LIMIT 1 FOR UPDATE`,
+      [id],
+    );
+    if (!scenes[0]) throw new HttpError(404, "场次不存在");
+    await connection.execute(
+      "UPDATE canvas_projects SET scene_id = NULL WHERE scene_id = ? AND deleted_at IS NULL",
+      [id],
+    );
+    await connection.execute("DELETE FROM team_project_scenes WHERE id = ?", [
+      id,
+    ]);
+    await connection.commit();
+    return { deleted: true as const, id };
+  } catch (error) {
+    await connection.rollback().catch(() => undefined);
+    throw error;
+  } finally {
+    connection.release();
+  }
+}
+
+async function sceneSummary(id: string): Promise<TeamProjectSceneSummary> {
+  const [rows] = await db.execute<SceneRow[]>(
+    `SELECT id, team_project_id, title, hidden, sort_order, created_at, updated_at
+       FROM team_project_scenes WHERE id = ? LIMIT 1`,
+    [id],
+  );
+  const row = rows[0];
+  if (!row) throw new HttpError(404, "场次不存在");
+  return {
+    id: row.id,
+    title: row.title,
+    hidden: Boolean(row.hidden),
+    sortOrder: Number(row.sort_order),
+    createdAt: iso(row.created_at),
+    updatedAt: iso(row.updated_at),
+  };
+}
+
+export async function assertSceneAvailable(
+  teamProjectId: string,
+  sceneId: string,
+) {
+  const [rows] = await db.execute<SceneRow[]>(
+    `SELECT id, team_project_id, title, hidden, sort_order, created_at, updated_at
+       FROM team_project_scenes
+      WHERE id = ? AND team_project_id = ?
+      LIMIT 1`,
+    [sceneId, teamProjectId],
+  );
+  const scene = rows[0];
+  if (!scene) throw new HttpError(404, "场次不存在");
+  return scene;
 }

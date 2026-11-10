@@ -16,6 +16,7 @@ export type CanvasProject = {
     title: string;
     scope: CanvasScope;
     teamProjectId: string | null;
+    sceneId: string | null;
     teamProjectTitle: string | null;
     ownerDisplayName: string | null;
     createdAt: string;
@@ -39,8 +40,8 @@ type CanvasStore = {
     projects: CanvasProject[];
     teamProjects: TeamProject[];
     deletedProjects: CanvasDeletedProject[];
-    createProject: (title?: string, teamProject?: Pick<TeamProject, "id" | "title">) => string;
-    importProject: (project: Partial<CanvasProject>, teamProject?: Pick<TeamProject, "id" | "title">) => string;
+    createProject: (title?: string, teamProject?: Pick<TeamProject, "id" | "title">, sceneId?: string | null) => string;
+    importProject: (project: Partial<CanvasProject>, teamProject?: Pick<TeamProject, "id" | "title">, sceneId?: string | null) => string;
     openProject: (id: string) => CanvasProject | null;
     renameProject: (id: string, title: string) => void;
     deleteProjects: (ids: string[]) => void;
@@ -146,7 +147,7 @@ export const useCanvasStore = create<CanvasStore>()(
             projects: [],
             teamProjects: [],
             deletedProjects: [],
-            createProject: (title = i18n.t("canvas.project.untitled"), teamProject) => {
+            createProject: (title = i18n.t("canvas.project.untitled"), teamProject, sceneId = null) => {
                 const now = new Date().toISOString();
                 const id = nanoid();
                 const project: CanvasProject = {
@@ -154,6 +155,7 @@ export const useCanvasStore = create<CanvasStore>()(
                     title,
                     scope: teamProject ? "project" : "personal",
                     teamProjectId: teamProject?.id || null,
+                    sceneId: teamProject ? sceneId : null,
                     teamProjectTitle: teamProject?.title || null,
                     ownerDisplayName: null,
                     createdAt: now,
@@ -169,13 +171,14 @@ export const useCanvasStore = create<CanvasStore>()(
                 set((state) => ({ projects: [project, ...state.projects] }));
                 return id;
             },
-            importProject: (source, teamProject) => {
+            importProject: (source, teamProject, sceneId = null) => {
                 const now = new Date().toISOString();
                 const project: CanvasProject = {
                     id: nanoid(),
                     title: source.title || i18n.t("canvas.project.imported"),
                     scope: teamProject ? "project" : "personal",
                     teamProjectId: teamProject?.id || null,
+                    sceneId: teamProject ? sceneId : null,
                     teamProjectTitle: teamProject?.title || null,
                     ownerDisplayName: null,
                     createdAt: source.createdAt || now,

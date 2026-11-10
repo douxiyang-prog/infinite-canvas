@@ -71,12 +71,15 @@ import {
 } from "./user-channels";
 import {
   createTeamProject,
+  createTeamProjectScene,
+  deleteTeamProjectScene,
   deleteTeamProject,
   assertTeamProjectMember,
   listAdminTeamProjects,
   listMemberTeamProjects,
   replaceTeamProjectMembers,
   updateTeamProject,
+  updateTeamProjectScene,
 } from "./team-projects";
 
 function roleValue(value: unknown, fallback?: UserRole): UserRole | undefined {
@@ -440,6 +443,42 @@ async function handleApi(request: Request, url: URL) {
       },
       201,
     );
+  }
+
+  if (
+    request.method === "POST" &&
+    url.pathname === "/api/admin/team-project-scenes"
+  ) {
+    const user = await requireAdmin(request);
+    const body = await readJson(request);
+    return json(
+      {
+        scene: await createTeamProjectScene(user.id, {
+          teamProjectId: body.teamProjectId,
+          title: body.title,
+        }),
+      },
+      201,
+    );
+  }
+
+  const teamProjectSceneMatch = url.pathname.match(
+    /^\/api\/admin\/team-project-scenes\/([A-Za-z0-9_-]+)$/,
+  );
+  if (teamProjectSceneMatch && request.method === "PATCH") {
+    await requireAdmin(request);
+    const body = await readJson(request);
+    return json({
+      scene: await updateTeamProjectScene(teamProjectSceneMatch[1], {
+        title: body.title,
+        hidden: body.hidden,
+        sortOrder: body.sortOrder,
+      }),
+    });
+  }
+  if (teamProjectSceneMatch && request.method === "DELETE") {
+    await requireAdmin(request);
+    return json(await deleteTeamProjectScene(teamProjectSceneMatch[1]));
   }
 
   const teamProjectMatch = url.pathname.match(

@@ -460,7 +460,7 @@ function NodeContent(props: NodeContentRendererProps) {
     if (props.node.type === CanvasNodeType.Config && props.renderNodeContent) return props.renderNodeContent(props.node);
     if (props.isBatchRoot && props.node.type === CanvasNodeType.Image) return <ImageNodeContent {...props} />;
     if (props.node.type === CanvasNodeType.Text && props.node.metadata?.texts?.length && (props.node.metadata.status !== "error" || props.node.metadata.texts.some((text) => text.content))) return <TextContent {...props} />;
-    if (props.node.metadata?.status === "loading") return <LoadingContent theme={props.theme} />;
+    if (props.node.metadata?.status === "loading") return <LoadingContent theme={props.theme} node={props.node} />;
     if (props.node.metadata?.status === "error") return <ErrorContent node={props.node} theme={props.theme} onRetry={props.onRetry} />;
 
     const Renderer = nodeContentRenderers[props.node.type as CanvasNodeType];
@@ -499,14 +499,50 @@ function GroupNodeContent({ node, theme, groupChildCount }: NodeContentRendererP
     );
 }
 
-function LoadingContent({ theme }: Pick<NodeContentRendererProps, "theme">) {
+function LoadingContent({ theme, node }: Pick<NodeContentRendererProps, "theme" | "node">) {
     const { t } = useTranslation();
+    if (node.type === CanvasNodeType.Image) {
+        return <EstimatedImageProgress theme={theme} model={node.metadata?.model} />;
+    }
     return (
         <div className="flex h-full w-full flex-col items-center justify-center gap-3" style={{ color: theme.node.activeStroke }}>
             <div className="size-10 animate-spin rounded-full border-2" style={{ borderColor: theme.node.stroke, borderTopColor: theme.node.activeStroke }} />
             <span className="text-[10px] tracking-[0.2em]">{t("canvas.node.generating")}</span>
         </div>
     );
+}
+
+function EstimatedImageProgress({ theme, model }: { theme: (typeof canvasThemes)[keyof typeof canvasThemes]; model?: string }) {
+    const { t } = useTranslation();
+    const expectedSeconds = model?.toLowerCase().includes("flash") ? 30 : 90;
+    const percent = useEstimatedProgress(expectedSeconds * 1000);
+    return (
+        <div className="flex h-full w-full flex-col items-center justify-center gap-3 px-6 text-center" style={{ color: theme.node.activeStroke }}>
+            <div className="flex items-baseline gap-1">
+                <span className="text-2xl font-semibold tabular-nums">{percent}%</span>
+                <span className="text-[10px] opacity-65">{t("generationProgress.estimated")}</span>
+            </div>
+            <div className="h-1.5 w-36 overflow-hidden rounded-full" style={{ background: theme.node.stroke }}>
+                <div className="h-full rounded-full transition-[width] duration-500 ease-out" style={{ width: `${percent}%`, background: theme.node.activeStroke }} />
+            </div>
+            <span className="text-[10px] opacity-60">{t("generationProgress.hint")}</span>
+        </div>
+    );
+}
+
+function useEstimatedProgress(expectedMs: number) {
+    const [percent, setPercent] = useState(0);
+    const startRef = useRef(0);
+    useEffect(() => {
+        startRef.current = performance.now();
+        setPercent(1);
+        const timer = window.setInterval(() => {
+            const elapsed = performance.now() - startRef.current;
+            setPercent(Math.min(95, Math.max(1, Math.round((elapsed / expectedMs) * 90))));
+        }, 500);
+        return () => window.clearInterval(timer);
+    }, [expectedMs]);
+    return percent;
 }
 
 function ErrorContent({ node, theme, onRetry }: Pick<NodeContentRendererProps, "node" | "theme" | "onRetry">) {
@@ -798,7 +834,7 @@ function ImageContent({
                         className={`pointer-events-none block h-full w-full select-none ${node.metadata?.freeResize ? "object-fill" : "object-contain"}`}
                     />
                 ) : (
-                    <ImageSlotStatus image={primaryImage} />
+                    <ImageSlotStatus image={primaryImage} model={node.metadata?.model} />
                 )}
             </div>
             {primaryImage?.status === "error" ? <BatchImageFailureActions placement="left" onRetry={() => onRetryBatchImage?.(primaryImage.id)} onDelete={() => onDeleteBatchImage?.(primaryImage.id)} /> : null}
@@ -879,7 +915,7 @@ function ExpandedImageCard({ node, image, index, scale, onView, onSetPrimary, on
                 onView();
             }}
         >
-            {image.content ? <img src={source} alt={node.title} draggable={false} className="pointer-events-none h-full w-full select-none object-contain" /> : <ImageSlotStatus image={image} />}
+            {image.content ? <img src={source} alt={node.title} draggable={false} className="pointer-events-none h-full w-full select-none object-contain" /> : <ImageSlotStatus image={image} model={node.metadata?.model} />}
             {image.content ? (
                 <div className="pointer-events-none absolute inset-x-2 top-2 flex items-center gap-1 opacity-0 transition-opacity duration-150 group-hover/node:pointer-events-auto group-hover/node:opacity-100">
                     <button type="button" className="flex h-8 min-w-0 flex-1 items-center justify-center gap-1 rounded-lg border px-1.5 text-[10px] font-medium shadow-[0_6px_18px_rgba(15,23,42,.16)] backdrop-blur-md transition hover:scale-[1.02]" style={{ background: theme.toolbar.panel, borderColor: theme.toolbar.border, color: theme.toolbar.activeText }} title={t("common.download")} onClick={(event) => (event.stopPropagation(), onDownload())}>
@@ -917,10 +953,11 @@ function BatchImageFailureActions({ placement, onRetry, onDelete }: { placement:
     );
 }
 
-function ImageSlotStatus({ image }: { image?: CanvasNodeImage }) {
+function ImageSlotStatus({ image, model }: { image?: CanvasNodeImage; model?: string }) {
     const theme = canvasThemes[useThemeStore((state) => state.theme)];
     const { t } = useTranslation();
     const failed = image?.status === "error";
+    if (!failed && image?.status === "loading") return <EstimatedImageProgress theme={theme} model={model} />;
     return (
         <div className="flex h-full w-full flex-col items-center justify-center gap-3 px-6 text-center" style={{ background: theme.node.fill, color: failed ? theme.node.text : theme.node.activeStroke }}>
             {failed ? <span className="text-xs leading-5">{image.errorDetails || t("canvas.node.failed")}</span> : <div className="size-10 animate-spin rounded-full border-2" style={{ borderColor: theme.node.stroke, borderTopColor: theme.node.activeStroke }} />}

@@ -64,7 +64,18 @@ export type WebdavSyncConfig = {
     directory: string;
     lastSyncedAt: string;
 };
-export type ConfigTabKey = "channels" | "local-proxy" | "preferences" | "prompt-sources" | "webdav" | "local-storage" | "server-storage";
+export type ConfigTabKey =
+    | "channels"
+    | "local-proxy"
+    | "preferences"
+    | "prompt-sources"
+    | "webdav"
+    | "local-storage"
+    | "server-storage"
+    | "project-scenes"
+    | "branding"
+    | "users"
+    | "user-channels";
 
 export type ChannelCredentialsImportResult = {
     status: "created" | "updated" | "missing-base-url" | "invalid-base-url";
@@ -217,7 +228,8 @@ function isAiConfigReady(config: AiConfig, model: string) {
 function normalizeGlobalConfig(persistedConfigInput: Partial<AiConfig> | null | undefined, persistedWebdavInput: Partial<WebdavSyncConfig> | null | undefined): { config: AiConfig; webdav: WebdavSyncConfig } {
     const persistedConfig = persistedConfigInput || {};
     const persistedWebdav = persistedWebdavInput || {};
-    const config = { ...defaultConfig, ...persistedConfig };
+    const config = { ...defaultConfig, ...persistedConfig } as AiConfig & { newApiMonitor?: unknown };
+    delete config.newApiMonitor;
     if (!Array.isArray(persistedConfig.channels)) config.channels = [];
     const channels = normalizeChannels(config);
     const models = modelOptionsFromChannels(channels);

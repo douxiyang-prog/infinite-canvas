@@ -16,6 +16,7 @@ import { CanvasTextSettingsPopover } from "./canvas-text-settings-popover";
 import { CanvasNodeType, type CanvasGenerationMode, type CanvasNodeData } from "@/types/canvas";
 import type { CanvasResourceReference } from "@/lib/canvas/canvas-resource-references";
 import { CanvasNodeReferenceBar } from "./canvas-node-reference-bar";
+import { NewApiGenerationCost } from "./new-api-generation-cost";
 
 export type CanvasNodeGenerationMode = CanvasGenerationMode;
 
@@ -125,26 +126,29 @@ export function CanvasNodePromptPanel({ node, nodes, isRunning, onPromptChange, 
                         </>
                     )}
                 </div>
-                <Button
-                    type="primary"
-                    className="!h-10 !min-w-16 shrink-0 !rounded-full !px-3"
-                    danger={isRunning}
-                    disabled={!isRunning && !prompt.trim()}
-                    onClick={() => (isRunning ? onStop(node.id) : submit())}
-                    aria-label={t(isRunning ? "canvas.promptPanel.stopGeneration" : "canvas.promptPanel.generate")}
-                >
-                    <span className="flex items-center gap-1.5">
-                        {isRunning ? (
-                            <>
-                                <LoaderCircle className="size-4 animate-spin" />
-                                <Square className="size-3.5 fill-current" />
-                                <span className="text-xs font-medium">{t("canvas.promptPanel.stop")}</span>
-                            </>
-                        ) : (
-                            <ArrowUp className="size-4" />
-                        )}
-                    </span>
-                </Button>
+                <div className="flex shrink-0 items-center gap-1">
+                    <NewApiGenerationCost config={config} mode={mode} count={Number(config.count) || 1} />
+                    <Button
+                        type="primary"
+                        className="!h-10 !min-w-16 shrink-0 !rounded-full !px-3"
+                        danger={isRunning}
+                        disabled={!isRunning && !prompt.trim()}
+                        onClick={() => (isRunning ? onStop(node.id) : submit())}
+                        aria-label={t(isRunning ? "canvas.promptPanel.stopGeneration" : "canvas.promptPanel.generate")}
+                    >
+                        <span className="flex items-center gap-1.5">
+                            {isRunning ? (
+                                <>
+                                    <LoaderCircle className="size-4 animate-spin" />
+                                    <Square className="size-3.5 fill-current" />
+                                    <span className="text-xs font-medium">{t("canvas.promptPanel.stop")}</span>
+                                </>
+                            ) : (
+                                <ArrowUp className="size-4" />
+                            )}
+                        </span>
+                    </Button>
+                </div>
             </div>
             <Modal title={t("canvas.promptPanel.editorTitle")} open={expanded} centered width={760} footer={null} onCancel={() => setExpanded(false)} destroyOnHidden>
                 <div data-canvas-no-zoom className="pt-2" onWheelCapture={(event) => event.stopPropagation()}>

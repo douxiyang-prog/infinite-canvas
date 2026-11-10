@@ -13,10 +13,14 @@ import type { AuthUser } from "@/types/user";
 export default function AdminUserChannelsPage() {
     const currentUser = useUserStore((state) => state.user);
     if (!currentUser || currentUser.role !== "admin") return <Navigate to="/" replace />;
-    return <AdminUserChannels />;
+    return (
+        <main className="h-full overflow-y-auto bg-background">
+            <AdminUserChannelsPanel />
+        </main>
+    );
 }
 
-function AdminUserChannels() {
+export function AdminUserChannelsPanel() {
     const { message } = App.useApp();
     const [searchParams] = useSearchParams();
     const [keyword, setKeyword] = useState("");
@@ -77,7 +81,7 @@ function AdminUserChannels() {
     };
 
     return (
-        <main className="h-full overflow-y-auto bg-background">
+        <div className="bg-background">
             <div className="mx-auto max-w-6xl px-6 py-7">
                 <div className="mb-6">
                     <h1 className="flex items-center gap-2 text-xl font-semibold text-stone-950 dark:text-stone-100">
@@ -191,7 +195,7 @@ function AdminUserChannels() {
                     </div>
                 </section>
             </div>
-        </main>
+        </div>
     );
 }
 

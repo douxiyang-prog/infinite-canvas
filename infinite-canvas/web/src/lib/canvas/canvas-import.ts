@@ -7,8 +7,9 @@ import type { TeamProject } from "@/types/team-project";
 
 export async function importCanvasArchive(
     file: File,
-    importProject: (project: Partial<CanvasProject>, teamProject?: Pick<TeamProject, "id" | "title">) => string,
+    importProject: (project: Partial<CanvasProject>, teamProject?: Pick<TeamProject, "id" | "title">, sceneId?: string | null) => string,
     teamProject?: Pick<TeamProject, "id" | "title">,
+    sceneId: string | null = null,
 ) {
     const zip = await readZip(file);
     const projectFile = zip.get("projects.json");
@@ -25,6 +26,6 @@ export async function importCanvasArchive(
             }),
         ),
     );
-    data.projects.forEach((item) => importProject(item.project, teamProject));
+    data.projects.forEach((item) => importProject(item.project, teamProject, sceneId));
     return { count: data.projects.length, projectIds: data.projects.map((item) => item.project.id) };
 }

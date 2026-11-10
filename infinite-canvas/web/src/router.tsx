@@ -1,12 +1,10 @@
-import { createBrowserRouter, Navigate, Outlet } from "react-router-dom";
+import { createBrowserRouter, Navigate, Outlet, useLocation } from "react-router-dom";
 
 import { RequireAuth } from "@/components/auth/require-auth";
 import { RequireSetup } from "@/components/auth/require-setup";
 import { AnalyticsTracker } from "@/components/layout/analytics-tracker";
 import UserLayout from "@/layouts/user-layout";
 import AdminSettingsPage from "@/pages/admin/settings";
-import AdminUserChannelsPage from "@/pages/admin/user-channels";
-import AdminUsersPage from "@/pages/admin/users";
 import AssetsPage from "@/pages/assets";
 import CanvasPage from "@/pages/canvas";
 import CanvasProjectPage from "@/pages/canvas/project";
@@ -16,6 +14,7 @@ import LoginPage from "@/pages/login";
 import NotFound from "@/pages/not-found";
 import PromptsPage from "@/pages/prompts";
 import ProjectsPage from "@/pages/projects";
+import ProjectDetailPage from "@/pages/projects/detail";
 import ProjectAssetsPage from "@/pages/projects/assets";
 import SetupPage from "@/pages/setup";
 import VideoPage from "@/pages/video";
@@ -42,12 +41,13 @@ export const router = createBrowserRouter([
                     { path: "/prompts", element: <PromptsPage /> },
                     { path: "/canvas", element: <CanvasPage /> },
                     { path: "/projects", element: <ProjectsPage /> },
+                    { path: "/projects/:projectId", element: <ProjectDetailPage /> },
                     { path: "/projects/:projectId/assets", element: <ProjectAssetsPage /> },
                     { path: "/canvas/:id", element: <CanvasProjectPage /> },
                     { path: "/config", element: <Navigate to="/admin/settings" replace /> },
                     { path: "/admin/settings", element: <AdminSettingsPage /> },
-                    { path: "/admin/user-channels", element: <AdminUserChannelsPage /> },
-                    { path: "/admin/users", element: <AdminUsersPage /> },
+                    { path: "/admin/user-channels", element: <AdminSettingsRedirect tab="user-channels" /> },
+                    { path: "/admin/users", element: <AdminSettingsRedirect tab="users" /> },
                 ],
             },
             { path: "/setup", element: <SetupPage /> },
@@ -55,3 +55,10 @@ export const router = createBrowserRouter([
     },
     { path: "*", element: <NotFound /> },
 ]);
+
+function AdminSettingsRedirect({ tab }: { tab: string }) {
+    const { search } = useLocation();
+    const params = new URLSearchParams(search);
+    params.set("tab", tab);
+    return <Navigate to={`/admin/settings?${params.toString()}`} replace />;
+}

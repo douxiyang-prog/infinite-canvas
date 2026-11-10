@@ -23,10 +23,14 @@ type PasswordValues = {
 export default function AdminUsersPage() {
     const currentUser = useUserStore((state) => state.user);
     if (!currentUser || currentUser.role !== "admin") return <Navigate to="/" replace />;
-    return <AdminUsers />;
+    return (
+        <main className="h-full overflow-y-auto bg-background">
+            <AdminUsersPanel />
+        </main>
+    );
 }
 
-function AdminUsers() {
+export function AdminUsersPanel() {
     const { message } = App.useApp();
     const navigate = useNavigate();
     const queryClient = useQueryClient();
@@ -99,7 +103,7 @@ function AdminUsers() {
     };
 
     return (
-        <main className="h-full overflow-y-auto bg-background">
+        <div className="bg-background">
             <div className="mx-auto max-w-6xl px-6 py-7">
                 <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
                     <div>
@@ -190,7 +194,7 @@ function AdminUsers() {
                                                 width: 280,
                                                 render: (_, user) => (
                                                     <Space size={4}>
-                                                        <Button type="link" size="small" icon={<RadioTower className="size-3.5" />} onClick={() => navigate(`/admin/user-channels?user=${user.id}`)}>
+                                                        <Button type="link" size="small" icon={<RadioTower className="size-3.5" />} onClick={() => navigate(`/admin/settings?tab=user-channels&user=${user.id}`)}>
                                                             渠道配置
                                                         </Button>
                                                         <Button type="link" size="small" icon={<KeyRound className="size-3.5" />} onClick={() => setPasswordUser(user)}>
@@ -288,6 +292,6 @@ function AdminUsers() {
                     </Form.Item>
                 </Form>
             </Modal>
-        </main>
+        </div>
     );
 }

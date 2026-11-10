@@ -183,7 +183,7 @@ export default function ProjectAssetsPage() {
             <div className="mx-auto max-w-7xl px-6 py-8">
                 <header className="flex flex-wrap items-end justify-between gap-4 border-b border-stone-200 pb-5 dark:border-stone-800">
                     <div>
-                        <Button type="text" icon={<ArrowLeft className="size-4" />} onClick={() => navigate("/projects")}>
+                        <Button type="text" icon={<ArrowLeft className="size-4" />} onClick={() => navigate(`/projects/${encodeURIComponent(projectId)}`)}>
                             返回项目
                         </Button>
                         <h1 className="mt-3 text-3xl font-semibold">{teamProject?.title || "项目"} · 项目资产</h1>
