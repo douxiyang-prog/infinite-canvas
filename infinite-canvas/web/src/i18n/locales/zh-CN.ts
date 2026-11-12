@@ -254,9 +254,9 @@ export default {
         miniMapClose: "关闭小地图",
         resetView: "重置视图",
         zoom: "放大/缩小画布",
-        agentConnected: "Codex 已连接",
-        agentConnecting: "Codex {{activity}}",
-        agentDisconnected: "Codex 未连接",
+        agentConnected: "Agent 已连接",
+        agentConnecting: "Agent {{activity}}",
+        agentDisconnected: "Agent 未连接",
         connecting: "连接中",
         openAgent: "打开本地 Codex 面板",
         nodeTypes: { image: "图片", text: "文本", config: "生成配置", video: "视频", audio: "音频", group: "组" },
@@ -369,6 +369,8 @@ export default {
     costEstimate: {
         title: "本次预计费用",
         detail: "{{count}} 张 × {{unit}}/张 = {{total}}",
+        videoTitle: "本次预计视频费用",
+        videoDetail: "{{seconds}} 秒 · {{resolution}} · {{total}}",
         channel: "计费渠道：{{channel}}",
         unavailable: "该模型暂不支持费用预估，以实际扣费为准",
     },
@@ -408,7 +410,18 @@ export default {
     },
     generationProgress: {
         estimated: "预计",
-        hint: "服务端无实时进度，按模型预计耗时估算",
+    },
+    videoProgress: {
+        estimated: "预计",
+        live: "任务进度",
+        elapsed: "已等待 {{time}}",
+        expected: "通常 {{time}}",
+        stage: {
+            queued: "正在提交视频任务",
+            rendering: "正在生成画面",
+            composing: "正在合成与编码",
+            finalizing: "正在下载结果",
+        },
     },
     home: {
         promptError: "获取提示词失败",
@@ -707,7 +720,7 @@ export default {
         status: { failed: "连接失败", connected: "已连接", connecting: "连接中", disconnected: "未连接" },
         state: { ready: "就绪", connectionRequired: "请填写 Local URL 和 Connect token", invalidUrl: "Local URL 格式不正确", offline: "离线", skillReadFailed: "读取 Skill 失败", skillParseFailed: "Skill 解析失败", requestFailed: "本地 Agent 请求失败" },
         siteTools: { canvasList: "画布列表", generationStatus: "生成任务状态", imageConfig: "生图配置", imageGenerate: "生图工作台生成", videoConfig: "视频配置", videoGenerate: "视频创作台生成", promptSearch: "搜索提示词", assetList: "资产列表", assetAdd: "添加资产", unknownTool: "未知工具：{{name}}", canvasLoading: "画布还在加载中，请稍后重试", canvasHint: "用 site_navigate 跳转 /canvas/{id} 打开对应画布", assetsLoading: "资产还在加载中，请稍后重试", assetTitleRequired: "请提供资产标题 title", textContentRequired: "kind=text 时需要提供 content 文本内容", imageUrlRequired: "kind=image 时需要提供 imageUrl（图片地址或 dataURL）", imageReadFailed: "无法读取该图片地址，请改用 dataURL 或可跨域访问的图片链接", assetKindUnsupported: "assets_add 仅支持 kind=text 或 kind=image", imageGenerationStarted: "已跳转生图工作台并触发生成，可用 generation_get_status 查询任务", imageConfigApplied: "已跳转生图工作台并填入参数，未触发生成", videoGenerationStarted: "已跳转视频创作台并触发生成，可用 generation_get_status 查询任务", videoConfigApplied: "已跳转视频创作台并填入参数，未触发生成" },
-        connect: { pluginTitle: "方式一：在 Codex 中使用插件", pluginText: "在 Codex app 安装 Infinite Canvas 插件后，通过插件启动画布，插件会自动启动本地 Agent 并带上连接信息。", directTitle: "方式二：直接运行 Agent", directText: "不使用 Codex 插件时，在终端运行下面命令，再回到网页里连接或手动填入 Local URL 和 Connect token。", commandCopied: "命令已复制", pluginReminder: "Codex 插件提醒", pluginReminderText: "只有安装 Codex 插件或手动添加 MCP 后，工具列表才会进入 Codex 上下文并增加 token 消耗；仅运行 npx -y @basketikun/canvas-agent@latest 启动本地 Agent 不会安装 MCP。", removePlugin: "移除插件", removeMcp: "移除手动 MCP", copyCommand: "复制命令", title: "连接本地 Agent", description: "按使用场景选择一种连接方式。", webConnection: "网页连接", autoDiscover: "默认自动读取 Local URL 和 Connect token，失败时再手动填写。", disconnect: "断开", connect: "连接", localAddress: "本地地址", urlPlaceholder: "例如 http://127.0.0.1:17371", token: "连接 Token", tokenPlaceholder: "自动发现，或手动填入 Connect token" },
+        connect: { pluginTitle: "方式一：在 Codex 中使用插件", pluginText: "在 Codex app 安装 Infinite Canvas 插件后，通过插件启动画布，插件会自动启动本地 Agent 并带上连接信息。", directTitle: "方式二：直接运行 Agent", directText: "不使用 Codex 插件时，在终端运行下面命令，再回到网页里连接或手动填入 Local URL 和 Connect token。", commandCopied: "命令已复制", pluginReminder: "Codex 插件提醒", pluginReminderText: "只有安装 Codex 插件或手动添加 MCP 后，工具列表才会进入 Codex 上下文并增加 token 消耗；仅运行 npx -y @basketikun/canvas-agent@latest 启动本地 Agent 不会安装 MCP。", removePlugin: "移除插件", removeMcp: "移除手动 MCP", copyCommand: "复制命令", title: "连接本地 Agent", description: "按使用场景选择一种连接方式。", dshTitle: "Agent 后端", dshNative: "火山原生 API", dshHarness: "DeepSeek Harness", dshCanvas: "Canvas 渠道", dshText: "内置 DSH 运行时 {{provider}} / {{model}}，支持会话历史和图片输入。", dshNativeText: "直接调用火山方舟 Messages API（{{model}}），响应实时流式返回，不启动本地 DSH 子进程。", dshCanvasText: "读取当前用户在 Canvas 中可用的文本渠道，通过该渠道的 Base URL、Key 和模型进行 Agent 聊天。", dshCanvasLabel: "Canvas 渠道", dshCanvasChannel: "选择 Canvas 文本渠道", dshCanvasModel: "选择文本模型", dshCanvasSave: "使用此渠道", dshCanvasSaved: "Canvas 渠道已应用，可以开始聊天。", dshCanvasSaveFailed: "应用 Canvas 渠道失败", dshCanvasMissing: "没有可用的 Canvas 文本渠道，请先在全局设置中配置 Base URL、API Key 和文本模型。", dshRuntimeChanged: "Agent 后端已切换；建议新建会话后继续聊天。", dshRuntimeChangeFailed: "切换 Agent 后端失败", dshApiKey: "Ark Agent Plan API Key", dshSave: "保存并重启 DSH", dshKeyReady: "密钥已配置", dshKeyMissing: "需要 API Key", dshKeySaved: "API Key 已保存，下一次对话会使用新的凭证。", dshKeySaveFailed: "保存 API Key 失败", webConnection: "网页连接", autoDiscover: "默认自动读取 Local URL 和 Connect token，失败时再手动填写。", disconnect: "断开", connect: "连接", localAddress: "本地地址", urlPlaceholder: "例如 http://127.0.0.1:17371", token: "连接 Token", tokenPlaceholder: "自动发现，或手动填入 Connect token" },
         history: { workspace: "工作空间", defaultWorkspace: "默认画布目录", selected: "已选 {{count}} 条", count: "{{count}} 条历史", empty: "暂无历史", deleteCount: "删除 {{count}} 条", refresh: "刷新", newThread: "新对话", selectThread: "选择{{name}}", untitled: "未命名对话", current: "当前", noWorkspaceThreads: "当前工作空间还没有对话记录", connectHint: "连接本地 Agent 后显示历史记录" },
         skills: { selectLocal: "选择本地 Skill", search: "搜索 Skill", loading: "正在读取 Skill…", noMatch: "没有匹配的已启用 Skill", none: "还没有可用的 Skill", select: "选择 Skill", connectHint: "连接 Agent 后使用 Skill" },
         skillManager: {

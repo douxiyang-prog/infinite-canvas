@@ -40,6 +40,53 @@ Codex app 插件会读取启动输出里的 Local URL 和 Connect token，并直
 
 Canvas Agent 默认只监听 `127.0.0.1`。网页第一次带正确 token 连接后，Canvas Agent 会记录该网页 Origin；之后其他 Origin 不能复用这个本地 Agent，除非用户清理 `~/.infinite-canvas/canvas-agent.json` 里的 `origins`。
 
+## DeepSeek Harness
+
+Canvas Agent 默认使用内置的 DeepSeek Harness，不再要求用户另开 DSH 页面。运行时通过官方 `@deepseek-ai/dsh-sdk-client` 管理 DSH 子进程，并复用画布右侧的 Agent 对话、历史和模型选择。
+
+右侧连接设置提供三种可切换后端：
+
+- **火山原生 API**：直接把聊天请求发送到火山方舟 Agent Plan Messages API，响应增量实时转发到画布。
+- **DeepSeek Harness**：启动本地 DSH 子进程，保留 Harness 的工具运行时、会话与模型路由能力。
+- **Canvas 渠道**：读取当前用户在画布全局设置中可用的文本渠道，把该渠道的 Base URL、API Key 和模型仅发送给本机 Canvas Agent，并通过 OpenAI 兼容的 `/v1/chat/completions` 接口聊天。New API 的 `sk-...` 文本渠道可直接使用。
+
+要求 Node.js `>=24.9.0`。DeepSeek Harness（`@deepseek-ai/dsh-*`）与 Codex（`@openai/codex`）是可选依赖：`npx` 默认会安装；使用 `npm install --omit=optional` 或 Canvas Agent Manager 精简版时不包含，此时 Agent 自动使用 Canvas 渠道，并拒绝切换到 DSH。默认模型路由为火山方舟 Agent Plan：
+
+```bash
+export ARK_AGENT_PLAN_CN_API_KEY="..."
+npx -y @basketikun/canvas-agent@latest
+```
+
+Windows PowerShell：
+
+```powershell
+$env:ARK_AGENT_PLAN_CN_API_KEY="..."
+npx -y @basketikun/canvas-agent@latest
+```
+
+也可以先连接本地 Agent，再在右侧连接设置中填写 Ark Agent Plan API Key。密钥保存在本机 `~/.infinite-canvas/canvas-agent.json`，不会上传到 Canvas 网页服务。
+
+可选环境变量：
+
+```text
+CANVAS_DSH_HOME              DSH 数据目录，默认 ~/.infinite-canvas/dsh
+CANVAS_DSH_PROVIDER          DSH provider，默认 ark-agent-plan-cn
+CANVAS_DSH_MODEL             默认模型，默认 deepseek-v4-pro
+CANVAS_DSH_API_KEY           Ark Agent Plan API Key 的别名
+CANVAS_AGENT_RUNTIME=ark     启动时默认使用火山原生 API
+CANVAS_AGENT_RUNTIME=dsh     启动时默认使用 DeepSeek Harness
+CANVAS_AGENT_RUNTIME=canvas  启动时默认使用 Canvas 文本渠道
+CANVAS_AGENT_RUNTIME=codex   回退到原有 Codex 适配器
+```
+
+Canvas 渠道的凭证只保存在本机 Agent 内存中，不写入配置文件或日志；切换渠道或重启 Agent 后需要重新选择。它只支持 OpenAI Chat Completions 文本渠道，不会把图片、视频或 Anthropic Messages 渠道当作聊天后端。
+
+Base URL 可以填写 `https://example.com` 或 `https://example.com/v1`；只填写域名时默认补全 `https://`，本机地址默认补全 `http://`。
+
+画布渠道中的相对地址（例如 `/provider`）会先按当前 Canvas 网页域名解析成完整 URL，再发送给本机 Agent；本地 Agent 不接受未解析的相对路径。
+
+Ark Agent Plan 路由不接受显式 reasoning effort；Canvas Agent 会使用模型默认档位。当前嵌入模式只开放聊天、模型选择、会话历史和图片输入；Codex Skill 草稿与 Skill 编辑仍需要切回 Codex 运行时或使用 DSH 自身界面。
+
 ## 发布
 
 `canvas-agent` 使用自己的 `package.json` 版本号，不跟仓库根目录 `VERSION` 绑定。推送到 `main` 后，GitHub Actions 会检查 npm 上是否已经存在当前包版本；不存在时才发布 `@basketikun/canvas-agent`。

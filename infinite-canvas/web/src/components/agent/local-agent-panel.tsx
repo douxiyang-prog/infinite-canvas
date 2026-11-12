@@ -1234,7 +1234,7 @@ export function LocalAgentPanel({ embedded, headless, autoConnect }: { embedded?
             return;
         }
         if (event.type === "item.completed" && event.item?.type === "agent_message" && event.item.id) {
-            const scoped = scopeEventChatItem(event, { id: event.item.id, role: "assistant", title: "Codex", text: stringText(event.item.text) }, event.item.id);
+            const scoped = scopeEventChatItem(event, { id: event.item.id, role: "assistant", title: "Agent", text: stringText(event.item.text) }, event.item.id);
             const currentMessages = useAgentStore.getState().messages;
             const index = currentMessages.findIndex((message) => message.id === scoped.id);
             if (index >= 0) {
@@ -1291,6 +1291,9 @@ export function LocalAgentPanel({ embedded, headless, autoConnect }: { embedded?
             const current = useAgentStore.getState();
             setAgentState({
                 activeTurnId: current.activeTurnId === scope.turnId ? "" : current.activeTurnId,
+                waiting: false,
+                sending: false,
+                activity: event.status === "failed" ? rt("processingFailed") : event.status === "interrupted" ? rt("taskStopped") : rt("completed"),
                 messages: current.messages.map((message) => message.threadId === scope.threadId && message.turnId === scope.turnId && message.streamId ? { ...message, streamId: undefined } : message),
             });
             if (event.status === "failed") showAgentError(event.error?.message, event, !event.replayed);
@@ -1303,7 +1306,7 @@ export function LocalAgentPanel({ embedded, headless, autoConnect }: { embedded?
         if (!text) return;
         const itemId = event.item?.id;
         if (!itemId) return;
-        const scoped = scopeEventChatItem(event, { id: itemId, role: "assistant", title: "Codex", text, streamId: itemId }, itemId);
+        const scoped = scopeEventChatItem(event, { id: itemId, role: "assistant", title: "Agent", text, streamId: itemId }, itemId);
         const currentMessages = useAgentStore.getState().messages;
         const index = currentMessages.findIndex((message) => message.id === scoped.id);
         if (index < 0) {

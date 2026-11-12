@@ -14,9 +14,18 @@
                 document.documentElement.style.colorScheme = t;
             } catch (e) {}
         </script>
+        <style>
+            #boot-loading {
+                min-height: 100vh;
+                display: grid;
+                place-items: center;
+                color: #a3a3a3;
+                font: 14px/1.6 "Microsoft YaHei", sans-serif;
+            }
+        </style>
     </head>
     <body class="bg-background text-foreground antialiased">
-        <div id="root"></div>
+        <div id="root"><div id="boot-loading">正在加载无限画布…</div></div>
         <script src="/config.js"></script>
         <script type="module" src="/src/main.tsx"></script>
     </body>

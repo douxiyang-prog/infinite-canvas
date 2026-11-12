@@ -12,7 +12,7 @@ import { runModelPlugin } from "./model-plugin";
 import type { ReferenceImage } from "@/types/image";
 import type { ReferenceAudio, ReferenceVideo } from "@/types/media";
 
-type VideoResponse = { id: string; status?: string; error?: { message?: string }; url?: string; result_url?: string; video_url?: string; content?: { video_url?: string; url?: string } | null };
+type VideoResponse = { id: string; status?: string; progress?: number | string; error?: { message?: string }; url?: string; result_url?: string; video_url?: string; content?: { video_url?: string; url?: string } | null };
 type ApiVideoResponse = VideoResponse | { code?: number | string; data?: VideoResponse | null; msg?: string; message?: string; error?: { message?: string } };
 type ApiEnvelope<T> = T | { code?: number | string; data?: T | null; msg?: string; message?: string; error?: { message?: string } };
 type RequestOptions = { signal?: AbortSignal };
@@ -21,14 +21,20 @@ const apiText = (key: string, options?: Record<string, unknown>) => i18n.t(`apiE
 
 export type VideoGenerationResult = { blob?: Blob; url?: string; mimeType?: string };
 export type VideoGenerationTask = { id: string; provider: "openai" | "gemini" | "plugin"; model: string };
+export type VideoGenerationPhase = "queued" | "running" | "finalizing";
 type GeminiInlineData = { bytesBase64Encoded: string; mimeType: string };
 type GeminiVideoOperation = {
     name?: string;
     done?: boolean;
     error?: { message?: string };
+    metadata?: { progress?: number | string; progressPercent?: number | string };
     response?: { generateVideoResponse?: { generatedSamples?: Array<{ video?: { uri?: string } }> } };
 };
-export type VideoGenerationTaskState = { status: "pending" } | { status: "completed"; result: VideoGenerationResult } | { status: "failed"; error: string };
+export type VideoGenerationTaskState =
+    | { status: "pending"; progress?: number; phase?: VideoGenerationPhase }
+    | { status: "completed"; result: VideoGenerationResult }
+    | { status: "failed"; error: string };
+type VideoWaitOptions = RequestOptions & { onProgress?: (progress: number | undefined, phase?: VideoGenerationPhase) => void };
 
 /** Results for scripted (plugin) video models, which run their own create+poll in one shot at task creation. */
 const pluginVideoResults = new Map<string, VideoGenerationResult>();
@@ -48,12 +54,13 @@ export async function requestVideoGeneration(config: AiConfig, prompt: string, r
     return waitForVideoGenerationTask(config, await createVideoGenerationTask(config, prompt, references, options), options);
 }
 
-export async function waitForVideoGenerationTask(config: AiConfig, task: VideoGenerationTask, options?: RequestOptions): Promise<VideoGenerationResult> {
+export async function waitForVideoGenerationTask(config: AiConfig, task: VideoGenerationTask, options?: VideoWaitOptions): Promise<VideoGenerationResult> {
     for (let attempt = 0; attempt < 120; attempt += 1) {
         if (options?.signal?.aborted) throw new DOMException("Aborted", "AbortError");
         const state = await pollVideoGenerationTask(config, task, options);
         if (state.status === "completed") return state.result;
         if (state.status === "failed") throw videoTaskFailed(state.error);
+        options?.onProgress?.(state.progress, state.phase);
         if (attempt === 119) throw new Error(apiText("videoTimeout", { provider: "" }));
         await delay(2500, options?.signal);
     }
@@ -257,7 +264,8 @@ async function pollOpenAIVideoTask(config: AiConfig, task: VideoGenerationTask, 
             return { status: "completed", result: { blob: content.data } };
         }
         if (video.status === "failed" || video.status === "cancelled") return { status: "failed", error: readApiErrorMessage(video.error?.message) || apiText("videoGenerationFailed") };
-        return { status: "pending" };
+        const phase = videoPhase(video.status);
+        return { status: "pending", progress: preciseVideoProgress(video.progress), phase };
     } catch (error) {
         throw new Error(readAxiosError(error, apiText("videoTaskQueryFailed")));
     }
@@ -310,7 +318,7 @@ async function pollGeminiVideoTask(config: AiConfig, task: VideoGenerationTask, 
     try {
         const state = unwrapEnvelope((await axios.get<ApiEnvelope<GeminiVideoOperation>>(geminiOperationUrl(config, task.id), { headers: geminiVideoHeaders(config), signal: options?.signal })).data, apiText("videoTaskQueryFailed"));
         if (state.error) return { status: "failed", error: readApiErrorMessage(state.error.message) || apiText("videoGenerationFailed") };
-        if (!state.done) return { status: "pending" };
+        if (!state.done) return { status: "pending", progress: preciseVideoProgress(state.metadata?.progress ?? state.metadata?.progressPercent), phase: "running" };
         const uri = state.response?.generateVideoResponse?.generatedSamples?.[0]?.video?.uri;
         if (!uri) return { status: "failed", error: apiText("noPlayableVideo") };
         const url = uri.includes("key=") ? uri : `${uri}${uri.includes("?") ? "&" : "?"}key=${config.apiKey}`;
@@ -416,6 +424,23 @@ function normalizeVideoResolution(value: string) {
 
 function unwrapVideoResponse(payload: ApiVideoResponse) {
     return unwrapEnvelope(payload, apiText("noVideoTask"));
+}
+
+function normalizeVideoProgress(value: number | string | undefined) {
+    const number = typeof value === "string" ? Number(value.replace(/%/g, "").trim()) : Number(value);
+    if (!Number.isFinite(number) || number < 0) return undefined;
+    return Math.min(99, number > 0 && number <= 1 ? Math.round(number * 100) : Math.round(number));
+}
+
+function preciseVideoProgress(value: number | string | undefined) {
+    const progress = normalizeVideoProgress(value);
+    return progress === 10 || progress === 50 || progress === 100 ? undefined : progress;
+}
+
+function videoPhase(status: string | undefined): VideoGenerationPhase {
+    const normalized = String(status || "").toLowerCase();
+    if (normalized === "queued" || normalized === "pending" || normalized === "submitted") return "queued";
+    return "running";
 }
 
 function unwrapEnvelope<T>(payload: ApiEnvelope<T>, emptyMessage: string): T {

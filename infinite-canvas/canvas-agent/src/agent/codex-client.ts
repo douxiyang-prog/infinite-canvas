@@ -896,5 +896,9 @@ function parseMaybeJson(value: unknown) {
 
 /** 定位当前依赖中 Codex CLI 的执行文件。 */
 function codexBin() {
-    return path.join(path.dirname(require.resolve("@openai/codex/package.json")), "bin", "codex.js");
+    try {
+        return path.join(path.dirname(require.resolve("@openai/codex/package.json")), "bin", "codex.js");
+    } catch {
+        throw new Error("当前安装包不包含 Codex 组件，请切换到其他后端，或安装完整版 Canvas Agent Manager");
+    }
 }

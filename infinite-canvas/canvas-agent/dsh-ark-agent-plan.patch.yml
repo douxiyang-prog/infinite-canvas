@@ -1,0 +1,47 @@
+# Volcengine Ark Agent Plan routes for the embedded DeepSeek Harness runtime.
+# Keep this profile isolated to the Canvas Agent DSH home; the user's regular
+# DSH profiles are not modified.
+- id: llm-pi-ai
+  config:
+    providers:
+      ark-agent-plan-cn:
+        displayName: Ark Agent Plan
+        apiKeyEnv: ARK_AGENT_PLAN_CN_API_KEY
+        api: anthropic-messages
+        baseURL: https://ark.cn-beijing.volces.com/api/plan
+        models:
+          - id: deepseek-v4-pro
+            name: DeepSeek V4 Pro (Agent Plan)
+            contextWindow: 1024000
+            maxTokens: 384000
+            input: [text]
+          - id: deepseek-v4-flash
+            name: DeepSeek V4 Flash (Agent Plan)
+            contextWindow: 1024000
+            maxTokens: 384000
+            input: [text]
+          - id: doubao-seed-evolving
+            name: Doubao Seed Evolving (Agent Plan)
+            contextWindow: 1024000
+            maxTokens: 256000
+            input: [text, image]
+          - id: doubao-seed-2.1-pro
+            name: Doubao Seed 2.1 Pro (Agent Plan)
+            contextWindow: 256000
+            maxTokens: 256000
+            input: [text, image]
+          - id: doubao-seed-2.1-turbo
+            name: Doubao Seed 2.1 Turbo (Agent Plan)
+            contextWindow: 256000
+            maxTokens: 256000
+            input: [text, image]
+          - id: kimi-k3
+            name: Kimi K3 (Agent Plan)
+            contextWindow: 1024000
+            maxTokens: 128000
+            input: [text, image]
+          - id: glm-5.3
+            name: GLM-5.3 (Agent Plan)
+            contextWindow: 1024000
+            maxTokens: 128000
+            input: [text]

@@ -254,9 +254,9 @@ export default {
         miniMapClose: "Close minimap",
         resetView: "Reset view",
         zoom: "Zoom canvas",
-        agentConnected: "Codex connected",
-        agentConnecting: "Codex {{activity}}",
-        agentDisconnected: "Codex disconnected",
+        agentConnected: "Agent connected",
+        agentConnecting: "Agent {{activity}}",
+        agentDisconnected: "Agent disconnected",
         connecting: "Connecting",
         openAgent: "Open local Codex panel",
         nodeTypes: { image: "Image", text: "Text", config: "Generation config", video: "Video", audio: "Audio", group: "Group" },
@@ -369,6 +369,8 @@ export default {
     costEstimate: {
         title: "Estimated cost",
         detail: "{{count}} images × {{unit}}/image = {{total}}",
+        videoTitle: "Estimated video cost",
+        videoDetail: "{{seconds}} seconds · {{resolution}} · {{total}}",
         channel: "Billing channel: {{channel}}",
         unavailable: "Cost estimation is unavailable for this model; the actual charge may differ",
     },
@@ -408,7 +410,18 @@ export default {
     },
     generationProgress: {
         estimated: "estimated",
-        hint: "The server does not expose live progress; this is estimated from the model's expected duration",
+    },
+    videoProgress: {
+        estimated: "estimated",
+        live: "task progress",
+        elapsed: "Waited {{time}}",
+        expected: "Typical {{time}}",
+        stage: {
+            queued: "Submitting video task",
+            rendering: "Generating video frames",
+            composing: "Composing and encoding",
+            finalizing: "Downloading the result",
+        },
     },
     home: {
         promptError: "Failed to load prompts",
@@ -707,7 +720,7 @@ export default {
         status: { failed: "Connection failed", connected: "Connected", connecting: "Connecting", disconnected: "Disconnected" },
         state: { ready: "Ready", connectionRequired: "Enter the Local URL and Connect token", invalidUrl: "The Local URL is invalid", offline: "Offline", skillReadFailed: "Failed to read Skill", skillParseFailed: "Failed to parse Skill", requestFailed: "Local Agent request failed" },
         siteTools: { canvasList: "Canvas list", generationStatus: "Generation task status", imageConfig: "Image configuration", imageGenerate: "Generate in Image Studio", videoConfig: "Video configuration", videoGenerate: "Generate in Video Studio", promptSearch: "Search prompts", assetList: "Asset list", assetAdd: "Add asset", unknownTool: "Unknown tool: {{name}}", canvasLoading: "The canvas is still loading. Try again shortly.", canvasHint: "Use site_navigate to open /canvas/{id}", assetsLoading: "Assets are still loading. Try again shortly.", assetTitleRequired: "Provide the asset title", textContentRequired: "content is required when kind=text", imageUrlRequired: "imageUrl is required when kind=image", imageReadFailed: "Could not read the image. Use a data URL or a cross-origin accessible image URL.", assetKindUnsupported: "assets_add supports only kind=text or kind=image", imageGenerationStarted: "Opened Image Studio and started generation. Use generation_get_status to query the task.", imageConfigApplied: "Opened Image Studio and applied the parameters without starting generation.", videoGenerationStarted: "Opened Video Studio and started generation. Use generation_get_status to query the task.", videoConfigApplied: "Opened Video Studio and applied the parameters without starting generation." },
-        connect: { pluginTitle: "Option 1: Use the Codex plugin", pluginText: "Install the Infinite Canvas plugin in the Codex app and launch the canvas through it. The plugin starts the local Agent and supplies the connection details automatically.", directTitle: "Option 2: Run the Agent directly", directText: "Without the Codex plugin, run the command below in a terminal, then return here to connect or enter the Local URL and Connect token manually.", commandCopied: "Command copied", pluginReminder: "Codex plugin note", pluginReminderText: "The tool list enters the Codex context and consumes additional tokens only after installing the Codex plugin or adding MCP manually. Running npx -y @basketikun/canvas-agent@latest alone does not install MCP.", removePlugin: "Remove plugin", removeMcp: "Remove manual MCP", copyCommand: "Copy command", title: "Connect local Agent", description: "Choose the connection method that fits your workflow.", webConnection: "Web connection", autoDiscover: "The Local URL and Connect token are discovered automatically by default. Enter them manually only if discovery fails.", disconnect: "Disconnect", connect: "Connect", localAddress: "Local address", urlPlaceholder: "For example http://127.0.0.1:17371", token: "Connection token", tokenPlaceholder: "Discover automatically or enter the Connect token" },
+        connect: { pluginTitle: "Option 1: Use the Codex plugin", pluginText: "Install the Infinite Canvas plugin in the Codex app and launch the canvas through it. The plugin starts the local Agent and supplies the connection details automatically.", directTitle: "Option 2: Run the Agent directly", directText: "Without the Codex plugin, run the command below in a terminal, then return here to connect or enter the Local URL and Connect token manually.", commandCopied: "Command copied", pluginReminder: "Codex plugin note", pluginReminderText: "The tool list enters the Codex context and consumes additional tokens only after installing the Codex plugin or adding MCP manually. Running npx -y @basketikun/canvas-agent@latest alone does not install MCP.", removePlugin: "Remove plugin", removeMcp: "Remove manual MCP", copyCommand: "Copy command", title: "Connect local Agent", description: "Choose the connection method that fits your workflow.", dshTitle: "Agent backend", dshNative: "Ark native API", dshHarness: "DeepSeek Harness", dshCanvas: "Canvas channel", dshText: "Embedded DSH runtime: {{provider}} / {{model}}, with session history and image input.", dshNativeText: "Calls the Volcengine Ark Messages API directly with {{model}}. Responses stream live without starting a local DSH process.", dshCanvasText: "Uses one of the current user's Canvas text channels, including its Base URL, API key, and model, for Agent chat.", dshCanvasLabel: "Canvas channel", dshCanvasChannel: "Select a Canvas text channel", dshCanvasModel: "Select a text model", dshCanvasSave: "Use this channel", dshCanvasSaved: "Canvas channel applied. You can start chatting.", dshCanvasSaveFailed: "Failed to apply the Canvas channel", dshCanvasMissing: "No usable Canvas text channel. Configure a Base URL, API key, and text model in Global Settings first.", dshRuntimeChanged: "Agent backend switched. Start a new conversation before continuing.", dshRuntimeChangeFailed: "Failed to switch the Agent backend", dshApiKey: "Ark Agent Plan API key", dshSave: "Save and apply", dshKeyReady: "Key configured", dshKeyMissing: "API key required", dshKeySaved: "API key saved. The next turn will use the new credential.", dshKeySaveFailed: "Failed to save the API key", webConnection: "Web connection", autoDiscover: "The Local URL and Connect token are discovered automatically by default. Enter them manually only if discovery fails.", disconnect: "Disconnect", connect: "Connect", localAddress: "Local address", urlPlaceholder: "For example http://127.0.0.1:17371", token: "Connection token", tokenPlaceholder: "Discover automatically or enter the Connect token" },
         history: { workspace: "Workspace", defaultWorkspace: "Default canvas directory", selected: "{{count}} selected", count: "{{count}} conversations", empty: "No history", deleteCount: "Delete {{count}}", refresh: "Refresh", newThread: "New chat", selectThread: "Select {{name}}", untitled: "Untitled conversation", current: "Current", noWorkspaceThreads: "No conversations in this workspace yet", connectHint: "Connect the local Agent to view conversation history" },
         skills: { selectLocal: "Select local Skill", search: "Search Skills", loading: "Loading Skills…", noMatch: "No matching enabled Skills", none: "No Skills available", select: "Select Skill", connectHint: "Connect the Agent to use Skills" },
         skillManager: {

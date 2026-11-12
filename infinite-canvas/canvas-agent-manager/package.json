@@ -1,0 +1,64 @@
+{
+  "name": "@basketikun/canvas-agent-manager",
+  "version": "0.1.4",
+  "private": true,
+  "description": "Desktop manager for Infinite Canvas Agent",
+  "main": "dist/main.js",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "start": "npm run build && electron .",
+    "prepare:resources": "node scripts/prepare-resources.mjs",
+    "dist": "node scripts/dist.mjs lite",
+    "dist:lite": "node scripts/dist.mjs lite",
+    "dist:full": "node scripts/dist.mjs full"
+  },
+  "devDependencies": {
+    "@types/node": "^24.10.0",
+    "electron": "^45.3.0",
+    "electron-builder": "^26.18.0",
+    "typescript": "^5.9.3"
+  },
+  "build": {
+    "appId": "com.basketikun.canvas-agent-manager",
+    "productName": "Canvas Agent Manager",
+    "artifactName": "canvas-agent-manager-${version}-${env.CANVAS_AGENT_EDITION}-setup.${ext}",
+    "asar": true,
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "renderer/**/*",
+      "assets/**/*",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "resources",
+        "to": "."
+      }
+    ],
+    "win": {
+      "icon": "assets/icon.ico",
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "installerIcon": "assets/icon.ico",
+      "uninstallerIcon": "assets/icon.ico",
+      "installerHeaderIcon": "assets/icon.ico",
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Canvas Agent Manager"
+    }
+  }
+}

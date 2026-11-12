@@ -4,8 +4,11 @@ import path from "node:path";
 import express, { type NextFunction, type Request, type Response } from "express";
 
 import { runClaudeTurn } from "../agent/claude.js";
+import { interruptArkNativeTurn, runArkNativeTurn } from "../agent/ark-native.js";
+import { canvasChannelModels, interruptCanvasChannelTurn, publicChannelConfig, runCanvasChannelTurn, setCanvasChannelConfig } from "../agent/canvas-channel.js";
 import { archiveCodexThread, CodexSkillLookupError, configureCodexSkill, generateCodexSkillDraft, interruptCodexTurn, isRecoverableThreadError, listCodexModels, listCodexSkills, listCodexThreads, readCodexThread, resolveCodexApproval, resolveCodexSkill, resumeCodexThread, runCodexTurn, startCodexThread, summarizeCodexThread } from "../agent/codex.js";
 import type { CodexReasoningEffort, CodexSkillSelector } from "../agent/codex-protocol.js";
+import { closeDshRuntime, createDshSession, deleteDshSession, dshInstalled, dshModels, dshRuntimeInfo, dshSessions, interruptDshTurn, listDshThreads, readDshSession, runDshTurn } from "../agent/deepseek.js";
 import { messageMetadataStore } from "../agent/message-metadata.js";
 import type { AgentAttachment, AgentPermissionMode } from "../agent/types.js";
 import { AGENT_PROTOCOL_VERSION, CanvasSession } from "../canvas/session.js";
@@ -17,6 +20,16 @@ import { SkillStore, SkillStoreError } from "../skills/store.js";
 /** 启动仅监听本机的 Canvas Agent HTTP 服务。 */
 export function startHttpServer() {
     const config = loadConfig(true);
+    const runtimeOverride = process.env.CANVAS_AGENT_RUNTIME?.trim().toLowerCase();
+    let agentRuntime = runtimeOverride === "codex"
+        ? "codex"
+        : runtimeOverride === "canvas" || config.runtime === "canvas"
+            ? "canvas"
+            : runtimeOverride === "ark" || config.runtime === "ark"
+                ? "ark"
+                : "dsh";
+    if (agentRuntime === "dsh" && !dshInstalled()) agentRuntime = "canvas";
+    if (agentRuntime !== "codex" && config.dsh?.apiKey && !process.env.ARK_AGENT_PLAN_CN_API_KEY) process.env.ARK_AGENT_PLAN_CN_API_KEY = config.dsh.apiKey;
     const port = Number(process.env.PORT) || Number(new URL(config.url).port) || DEFAULT_PORT;
     config.url = `http://127.0.0.1:${port}`;
     saveConfig(config);
@@ -121,7 +134,7 @@ export function startHttpServer() {
         next();
     });
     app.get("/health", (_req, res) => res.json(session.health()));
-    app.get("/config", (_req, res) => res.json({ ok: true, protocolVersion: AGENT_PROTOCOL_VERSION, url: config.url, hasToken: true }));
+    app.get("/config", (_req, res) => res.json({ ok: true, protocolVersion: AGENT_PROTOCOL_VERSION, url: config.url, hasToken: true, runtime: agentRuntime }));
     app.use((req, res, next) => {
         if (validToken(req, requestUrl(req, config), config.token)) return next();
         res.status(401).json({ ok: false, error: "invalid token" });
@@ -170,6 +183,185 @@ export function startHttpServer() {
         res.type(path.extname(filePath)).send(await readFile(filePath));
     }));
     app.post("/api/tools", route(async (req, res) => res.json({ ok: true, result: await session.callTool(req.body?.name, req.body?.input || {}) })));
+    app.post("/agent/shutdown", (_req, res) => {
+        res.json({ ok: true });
+        setTimeout(() => {
+            void Promise.allSettled([closeDshRuntime(), Promise.resolve(interruptArkNativeTurn()), Promise.resolve(interruptCanvasChannelTurn())]).finally(() => process.exit(0));
+        }, 50);
+    });
+    if (agentRuntime !== "codex") {
+        const dshMutation = (handler: (req: Request, res: Response) => unknown | Promise<unknown>) => route(async (req, res) => {
+            if (!session.beginCodexMutation()) return res.status(409).json({ ok: false, code: "CONVERSATION_BUSY", error: "DeepSeek Harness 正在运行或正在切换会话，请稍后重试", state: session.conversationStateSnapshot });
+            try {
+                return await handler(req, res);
+            } finally {
+                session.endCodexMutation();
+            }
+        });
+        app.get("/agent/codex/workspace", (_req, res) => {
+            res.json({ ok: true, workspace: ensureSiteWorkspace(config), conversation: session.conversationStateSnapshot });
+        });
+        app.get("/agent/codex/models", (_req, res) => res.json({ ok: true, data: agentRuntime === "canvas" ? canvasChannelModels() : dshModels(), nextCursor: null }));
+        app.get("/agent/canvas-channel", (_req, res) => res.json({ ok: true, channel: publicChannelConfig() }));
+        app.post("/agent/canvas-channel", route(async (req, res) => {
+            try {
+                const channel = setCanvasChannelConfig({
+                    channelId: String(req.body?.channelId || ""),
+                    channelName: String(req.body?.channelName || ""),
+                    baseUrl: String(req.body?.baseUrl || ""),
+                    apiKey: String(req.body?.apiKey || ""),
+                    model: String(req.body?.model || ""),
+                });
+                res.json({ ok: true, channel });
+            } catch (error) {
+                res.status(400).json({ ok: false, error: error instanceof Error ? error.message : "Invalid Canvas channel configuration" });
+            }
+        }));
+        app.get("/agent/dsh/config", (_req, res) => res.json({
+            ok: true,
+            ...dshRuntimeInfo(),
+            runtime: agentRuntime,
+            hasApiKey: Boolean(config.dsh?.apiKey || process.env.ARK_AGENT_PLAN_CN_API_KEY || process.env.CANVAS_DSH_API_KEY),
+        }));
+        app.post("/agent/dsh/config", route(async (req, res) => {
+            const apiKey = String(req.body?.apiKey || "").trim();
+            if (!apiKey || apiKey.length > 4096) return res.status(400).json({ ok: false, error: "Ark Agent Plan API Key 无效" });
+            config.dsh = { ...config.dsh, apiKey };
+            saveConfig(config);
+            process.env.ARK_AGENT_PLAN_CN_API_KEY = apiKey;
+            await closeDshRuntime();
+            res.json({ ok: true, ...dshRuntimeInfo(), runtime: agentRuntime, hasApiKey: true });
+        }));
+        app.post("/agent/runtime", route(async (req, res) => {
+            const runtime = String(req.body?.runtime || "");
+            if (runtime !== "dsh" && runtime !== "ark" && runtime !== "canvas") return res.status(400).json({ ok: false, error: "Agent runtime 无效" });
+            if (runtime === "dsh" && !dshInstalled()) return res.status(400).json({ ok: false, error: "当前安装包不包含 DeepSeek Harness 组件，请安装完整版 Canvas Agent Manager" });
+            agentRuntime = runtime;
+            config.runtime = runtime;
+            saveConfig(config);
+            await Promise.all([closeDshRuntime().catch(() => undefined), Promise.resolve(interruptArkNativeTurn()), Promise.resolve(interruptCanvasChannelTurn())]);
+            res.json({ ok: true, runtime: agentRuntime });
+        }));
+        app.get("/agent/codex/skills", (_req, res) => res.json({ ok: true, data: [], errors: [] }));
+        app.post("/agent/codex/skills/draft", (_req, res) => res.status(501).json({ ok: false, error: "DeepSeek Harness 暂不支持在当前面板生成 Codex Skill 草稿" }));
+        app.get("/agent/codex/skills/:name", (_req, res) => res.status(404).json({ ok: false, error: "DeepSeek Harness 暂未暴露 Skill 编辑接口" }));
+        app.post("/agent/codex/skills/:name/enabled", (_req, res) => res.status(501).json({ ok: false, error: "DeepSeek Harness Skill 管理请在 DSH 中完成" }));
+        app.post("/agent/codex/skills/:name/delete", (_req, res) => res.status(501).json({ ok: false, error: "DeepSeek Harness Skill 管理请在 DSH 中完成" }));
+        app.post("/agent/codex/skills/:name", (_req, res) => res.status(501).json({ ok: false, error: "DeepSeek Harness Skill 管理请在 DSH 中完成" }));
+        app.get("/agent/codex/threads", route(async (_req, res) => {
+            const workspace = ensureSiteWorkspace(config);
+            const result = await listDshThreads(workspace.workspacePath);
+            res.json({ ok: true, workspace, conversation: session.conversationStateSnapshot, ...result });
+        }));
+        const createSession = async (clientId: string) => {
+            const workspace = ensureSiteWorkspace(config);
+            const created = await createDshSession(workspace.workspacePath);
+            setActiveThread(created.id, { emptyThread: true, sourceClientId: clientId });
+            return { thread: created, snapshot: await readDshSession(created.id) };
+        };
+        app.post("/agent/codex/threads/new", dshMutation(async (req, res) => {
+            const clientId = String(req.body?.clientId || "");
+            const created = await createSession(clientId);
+            res.json({ ok: true, workspace: ensureSiteWorkspace(config), conversation: session.conversationStateSnapshot, thread: created.snapshot?.thread, messages: [], settledTurnIds: [], historyReady: true });
+        }));
+        app.post("/agent/codex/threads/reset", dshMutation(async (req, res) => {
+            const clientId = String(req.body?.clientId || "");
+            await createSession(clientId);
+            res.json({ ok: true, workspace: ensureSiteWorkspace(config), conversation: session.conversationStateSnapshot });
+        }));
+        app.get("/agent/codex/threads/:threadId", route(async (req, res) => {
+            const snapshot = await readDshSession(routeParam(req.params.threadId));
+            if (!snapshot) return res.status(404).json({ ok: false, error: "DeepSeek Harness 会话不存在" });
+            res.json({ ok: true, workspace: ensureSiteWorkspace(config), conversation: session.conversationStateSnapshot, ...snapshot });
+        }));
+        app.post("/agent/codex/history/ack", (_req, res) => res.json({ ok: true }));
+        app.post("/agent/codex/threads/:threadId/resume", dshMutation(async (req, res) => {
+            const threadId = routeParam(req.params.threadId);
+            const snapshot = await readDshSession(threadId);
+            if (!snapshot) return res.status(404).json({ ok: false, error: "DeepSeek Harness 会话不存在" });
+            const clientId = String(req.body?.clientId || "");
+            const nextWorkspace = setActiveThread(threadId, { sourceClientId: clientId });
+            res.json({ ok: true, workspace: nextWorkspace, conversation: session.conversationStateSnapshot, ...snapshot });
+        }));
+        app.post("/agent/codex/threads/:threadId/delete", dshMutation(async (req, res) => {
+            const threadId = routeParam(req.params.threadId);
+            if (!await dshSessions.get(threadId)) return res.status(404).json({ ok: false, error: "DeepSeek Harness 会话不存在" });
+            await deleteDshSession(threadId);
+            const workspace = ensureSiteWorkspace(config);
+            const nextWorkspace = setActiveThread(workspace.activeThreadId === threadId ? "" : workspace.activeThreadId || "", { sourceClientId: String(req.body?.clientId || "") });
+            res.json({ ok: true, workspace: nextWorkspace, conversation: session.conversationStateSnapshot });
+        }));
+        app.post("/agent/codex/turn", dshMutation(async (req, res) => {
+            const attachments = Array.isArray(req.body?.attachments) ? req.body.attachments as AgentAttachment[] : [];
+            const workspace = ensureSiteWorkspace(config);
+            const prompt = String(req.body?.prompt || "");
+            if (!prompt.trim()) return res.status(400).json({ ok: false, error: "请输入任务内容" });
+            const clientId = String(req.body?.clientId || "");
+            if (!clientId || !session.hasClient(clientId)) return res.status(409).json({ ok: false, error: "发起任务的网页已断开，请重新连接后再试" });
+            const requestedThreadId = String(req.body?.threadId || "");
+            const activeThreadId = workspace.activeThreadId || "";
+            const conversation = session.conversationStateSnapshot;
+            const requestedConversationId = String(req.body?.conversationId || "");
+            const expectedRevision = Number(req.body?.expectedRevision || 0);
+            if (requestedThreadId !== activeThreadId || conversation.threadId !== activeThreadId || (requestedConversationId && requestedConversationId !== conversation.conversationId) || (expectedRevision && expectedRevision !== conversation.revision)) {
+                return res.status(409).json({ ok: false, code: "CONVERSATION_STALE", error: "当前会话已切换，已同步最新状态，请确认后重试", state: conversation });
+            }
+            if (!activeThreadId || !["ready", "warning"].includes(conversation.status)) {
+                return res.status(409).json({ ok: false, code: "CONVERSATION_NOT_READY", error: "DeepSeek Harness 对话仍在初始化，请稍候", state: conversation });
+            }
+            if (!await dshSessions.get(activeThreadId)) return res.status(409).json({ ok: false, code: "CONVERSATION_STALE", error: "DeepSeek Harness 会话不存在，请新建对话后重试", state: conversation });
+            const messageId = String(req.body?.messageId || Date.now());
+            const messageText = String(req.body?.messageText || prompt);
+            const turnId = crypto.randomUUID();
+            const messageMetadata = await messageMetadataStore.recordPending(messageId, req.body?.messageMetadata);
+            await messageMetadataStore.bindThread(messageId, activeThreadId);
+            await messageMetadataStore.bindTurn(messageId, activeThreadId, turnId);
+            const model = String(req.body?.model || "") || undefined;
+            const effort = reasoningEffort(req.body?.effort);
+            session.bindClient(clientId);
+            session.markConversationRunning(activeThreadId);
+            session.setCodexState({ busy: true, threadId: activeThreadId, turnId });
+            session.emitThread("chat_message", activeThreadId, {
+                turnId,
+                sourceClientId: clientId,
+                message: { id: `${activeThreadId}:${turnId}:user`, itemId: "synthetic:user", clientMessageId: messageId, threadId: activeThreadId, turnId, role: "user", text: messageText, ...(messageMetadata || {}) },
+            });
+            const runInput = {
+                threadId: activeThreadId,
+                turnId,
+                cwd: workspace.workspacePath,
+                prompt,
+                messageText,
+                attachments,
+                messageMetadata,
+                model,
+                effort,
+                emit: (type: string, payload: unknown) => {
+                    const value: Record<string, unknown> = payload && typeof payload === "object" && !Array.isArray(payload) ? payload as Record<string, unknown> : { value: payload };
+                    session.emitThread(type, String(value.threadId || activeThreadId), { ...value, sourceClientId: String(value.sourceClientId || clientId) });
+                },
+                onFinish: () => {
+                    session.clearTurnAttachments(clientId);
+                    session.releaseClient(clientId);
+                    session.setCodexState({ busy: false, threadId: activeThreadId, turnId });
+                    session.finishConversationRun(activeThreadId);
+                },
+            };
+            if (agentRuntime === "ark") void runArkNativeTurn(runInput);
+            else if (agentRuntime === "canvas") void runCanvasChannelTurn(runInput);
+            else void runDshTurn({ ...runInput, permissionMode: permissionMode(req.body?.permissionMode) });
+            res.json({ ok: true, threadId: activeThreadId, turnId });
+        }));
+        app.post("/agent/codex/approval", (_req, res) => res.status(409).json({ ok: false, error: "DeepSeek Harness 当前没有待处理的审批" }));
+        app.post("/agent/codex/interrupt", route(async (_req, res) => {
+            const ok = agentRuntime === "ark"
+                ? interruptArkNativeTurn()
+                : agentRuntime === "canvas"
+                    ? interruptCanvasChannelTurn()
+                    : await interruptDshTurn();
+            res.status(ok ? 200 : 409).json({ ok, ...(ok ? {} : { error: "当前没有可停止的任务" }) });
+        }));
+    } else {
     app.get("/agent/codex/workspace", (_req, res) => {
         const workspace = ensureSiteWorkspace(config);
         res.json({ ok: true, workspace, conversation: session.conversationStateSnapshot });
@@ -420,6 +612,7 @@ export function startHttpServer() {
         const ok = await interruptCodexTurn(skillDraftRunning ? undefined : String(req.body?.threadId || ""));
         res.status(ok ? 200 : 409).json({ ok, ...(ok ? {} : { error: "当前没有可停止的任务" }) });
     }));
+    }
     app.post("/agent/claude/turn", (req, res) => {
         runClaudeTurn(String(req.body?.prompt || ""), emit);
         res.json({ ok: true });
@@ -433,16 +626,31 @@ export function startHttpServer() {
 
     app.listen(port, "127.0.0.1", () => {
         console.log("Infinite Canvas Agent");
-        checkVersions();
+        if (agentRuntime === "codex") checkVersions();
         console.log(`Local URL: ${config.url}`);
         console.log(`Connect token: ${config.token}`);
-        console.log("Codex MCP is not installed by this command.");
-        console.log("Optional MCP add: codex mcp add infinite-canvas -- npx -y @basketikun/canvas-agent@latest mcp");
-        console.log("Remove manually added MCP: codex mcp remove infinite-canvas");
+        if (agentRuntime !== "codex") {
+            const runtimeLabel = agentRuntime === "ark" ? "Volcengine Ark native API" : agentRuntime === "canvas" ? "Canvas channel" : "DeepSeek Harness";
+            console.log(`Agent runtime: ${runtimeLabel}`);
+            if (agentRuntime !== "canvas") console.log("Ark Agent Plan key: set ARK_AGENT_PLAN_CN_API_KEY or CANVAS_DSH_API_KEY before starting.");
+        } else {
+            console.log("Agent runtime: Codex");
+            console.log("Codex MCP is not installed by this command.");
+            console.log("Optional MCP add: codex mcp add infinite-canvas -- npx -y @basketikun/canvas-agent@latest mcp");
+            console.log("Remove manually added MCP: codex mcp remove infinite-canvas");
+        }
         if (logger.enabled) console.log(`Debug log: ${logger.filePath}`);
-        logger.info("Canvas Agent started", { url: config.url, workspace: ensureSiteWorkspace(config).workspacePath, debugLog: logger.filePath });
+        logger.info("Canvas Agent started", { url: config.url, runtime: agentRuntime, workspace: ensureSiteWorkspace(config).workspacePath, debugLog: logger.filePath });
         const activeThreadId = initialWorkspace.activeThreadId || "";
-        if (activeThreadId && session.beginCodexMutation()) {
+        if (agentRuntime !== "codex") {
+            void (async () => {
+                if (activeThreadId && await dshSessions.get(activeThreadId)) session.activateConversation(activeThreadId);
+                else setActiveThread("", { emptyThread: true });
+            })().catch((error) => logger.warn("Failed to restore DeepSeek Harness workspace", { error }));
+            const close = () => void Promise.allSettled([closeDshRuntime(), Promise.resolve(interruptArkNativeTurn()), Promise.resolve(interruptCanvasChannelTurn())]).finally(() => process.exit(0));
+            process.once("SIGINT", close);
+            process.once("SIGTERM", close);
+        } else if (activeThreadId && session.beginCodexMutation()) {
             void prepareExistingThread(activeThreadId).catch(async (error) => {
                 if (!isRecoverableThreadError(error)) return failPreparedConversation(error, activeThreadId);
                 session.beginConversation();

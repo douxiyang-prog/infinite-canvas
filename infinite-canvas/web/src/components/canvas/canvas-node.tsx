@@ -10,6 +10,7 @@ import { getNodeDefinition } from "@/lib/canvas/node-registry";
 import { buildNodeContext } from "@/lib/canvas/plugin-node-context";
 import { useThemeStore } from "@/stores/use-theme-store";
 import { CanvasResourceMentionTextarea } from "./canvas-resource-mention-textarea";
+import { VideoGenerationProgress } from "@/components/video-generation-progress";
 import { CanvasNodeType, type CanvasNodeData, type CanvasNodeImage, type CanvasNodeText, type Position } from "@/types/canvas";
 import type { CanvasNodeContext, CanvasPluginHost } from "@/types/canvas-plugin";
 import type { CanvasResourceReference } from "@/lib/canvas/canvas-resource-references";
@@ -504,6 +505,9 @@ function LoadingContent({ theme, node }: Pick<NodeContentRendererProps, "theme" 
     if (node.type === CanvasNodeType.Image) {
         return <EstimatedImageProgress theme={theme} model={node.metadata?.model} />;
     }
+    if (node.type === CanvasNodeType.Video) {
+        return <VideoGenerationProgress startedAt={node.metadata?.videoProgressStartedAt} expectedMs={node.metadata?.videoExpectedMs} progress={node.metadata?.videoProgress} phase={node.metadata?.videoProgressPhase} />;
+    }
     return (
         <div className="flex h-full w-full flex-col items-center justify-center gap-3" style={{ color: theme.node.activeStroke }}>
             <div className="size-10 animate-spin rounded-full border-2" style={{ borderColor: theme.node.stroke, borderTopColor: theme.node.activeStroke }} />
@@ -525,7 +529,6 @@ function EstimatedImageProgress({ theme, model }: { theme: (typeof canvasThemes)
             <div className="h-1.5 w-36 overflow-hidden rounded-full" style={{ background: theme.node.stroke }}>
                 <div className="h-full rounded-full transition-[width] duration-500 ease-out" style={{ width: `${percent}%`, background: theme.node.activeStroke }} />
             </div>
-            <span className="text-[10px] opacity-60">{t("generationProgress.hint")}</span>
         </div>
     );
 }

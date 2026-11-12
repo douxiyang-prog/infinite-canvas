@@ -4,7 +4,8 @@ import { Button, Modal, Tooltip } from "antd";
 import { useTranslation } from "react-i18next";
 
 import { ModelPicker } from "@/components/model-picker";
-import { defaultConfig, resolveModelForCapability, useConfigStore, useEffectiveConfig, type AiConfig } from "@/stores/use-config-store";
+import { defaultConfig, resolveModelForCapability, useConfigStore, type AiConfig } from "@/stores/use-config-store";
+import { useCanvasEffectiveConfig } from "@/stores/canvas/use-canvas-image-preference-store";
 import { canvasThemes } from "@/lib/canvas-theme";
 import { useThemeStore } from "@/stores/use-theme-store";
 import { CanvasImageSettingsPopover } from "./canvas-image-settings-popover";
@@ -38,7 +39,7 @@ type CanvasNodePromptPanelProps = {
 
 export function CanvasNodePromptPanel({ node, nodes, isRunning, onPromptChange, onConfigChange, onGenerate, onStop, mentionReferences = [], connectedNodes = [], onDisconnectReference, onStartReferenceSelection, onImageSettingsOpenChange, modeOverride }: CanvasNodePromptPanelProps) {
     const { t } = useTranslation();
-    const globalConfig = useEffectiveConfig();
+    const globalConfig = useCanvasEffectiveConfig();
     const openConfigDialog = useConfigStore((state) => state.openConfigDialog);
     const theme = canvasThemes[useThemeStore((state) => state.theme)];
     const mode = modeOverride ?? defaultMode(node.type);
@@ -127,7 +128,6 @@ export function CanvasNodePromptPanel({ node, nodes, isRunning, onPromptChange, 
                     )}
                 </div>
                 <div className="flex shrink-0 items-center gap-1">
-                    <NewApiGenerationCost config={config} mode={mode} count={Number(config.count) || 1} />
                     <Button
                         type="primary"
                         className="!h-10 !min-w-16 shrink-0 !rounded-full !px-3"
@@ -149,6 +149,9 @@ export function CanvasNodePromptPanel({ node, nodes, isRunning, onPromptChange, 
                         </span>
                     </Button>
                 </div>
+            </div>
+            <div className="mt-1 flex min-w-0 justify-end">
+                <NewApiGenerationCost config={config} mode={mode} count={Number(config.count) || 1} hasVideoReference={mentionReferences.some((reference) => reference.kind === "video")} />
             </div>
             <Modal title={t("canvas.promptPanel.editorTitle")} open={expanded} centered width={760} footer={null} onCancel={() => setExpanded(false)} destroyOnHidden>
                 <div data-canvas-no-zoom className="pt-2" onWheelCapture={(event) => event.stopPropagation()}>

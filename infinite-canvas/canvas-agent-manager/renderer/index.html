@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:">
+  <title>Canvas Agent Manager</title>
+  <link rel="stylesheet" href="./styles.css">
+</head>
+<body>
+  <main class="shell">
+    <header class="hero">
+      <div>
+        <p class="eyebrow">INFINITE CANVAS</p>
+        <h1>Canvas Agent Manager</h1>
+        <p class="subtitle">本机 Agent 的运行控制、连接信息和日志。</p>
+      </div>
+      <div id="status-pill" class="status-pill"><span></span><strong>读取中</strong></div>
+    </header>
+
+    <section class="summary card">
+      <div>
+        <span class="label">当前状态</span>
+        <strong id="status-text">正在读取…</strong>
+        <small id="status-detail"></small>
+      </div>
+      <div class="actions">
+        <button id="start-btn" class="button primary">启动</button>
+        <button id="restart-btn" class="button">重启</button>
+        <button id="stop-btn" class="button danger">停止</button>
+      </div>
+    </section>
+
+    <div class="grid">
+      <section class="card">
+        <div class="card-title">
+          <div>
+            <span class="label">连接信息</span>
+            <h2>Canvas 网页连接</h2>
+          </div>
+          <button id="copy-token" class="text-button">复制 Token</button>
+        </div>
+        <label>Local URL</label>
+        <div class="readonly" id="agent-url">—</div>
+        <label>Connect token</label>
+        <div class="token-row">
+          <div class="readonly token" id="token">—</div>
+          <button id="toggle-token" class="icon-button" title="显示或隐藏 Token">显示</button>
+        </div>
+        <button id="open-canvas" class="button wide">打开 Canvas</button>
+      </section>
+
+      <section class="card">
+        <div class="card-title">
+          <div>
+            <span class="label">运行设置</span>
+            <h2>Agent 配置</h2>
+          </div>
+          <button id="open-data" class="text-button">数据目录</button>
+        </div>
+        <label for="port">本机端口</label>
+        <input id="port" type="number" min="1024" max="65535" value="17371">
+        <label for="runtime">Agent 后端</label>
+        <select id="runtime">
+          <option value="canvas">Canvas 渠道</option>
+          <option value="dsh">DeepSeek Harness</option>
+          <option value="ark">火山原生 API</option>
+        </select>
+        <label for="canvas-url">Canvas 地址</label>
+        <input id="canvas-url" type="url" placeholder="http://192.168.1.68">
+        <div class="checks">
+          <label class="check"><input id="start-on-launch" type="checkbox"> 登录 Windows 后自动启动 Agent</label>
+          <label class="check"><input id="auto-restart" type="checkbox"> 异常退出后自动重启</label>
+          <label class="check"><input id="minimize-to-tray" type="checkbox"> 关闭窗口时最小化到托盘</label>
+        </div>
+        <button id="save-settings" class="button primary wide">保存设置并应用</button>
+      </section>
+    </div>
+
+    <section class="card logs-card">
+      <div class="card-title">
+        <div>
+          <span class="label">实时输出</span>
+          <h2>Agent 日志</h2>
+        </div>
+        <button id="clear-logs" class="text-button">清空界面</button>
+      </div>
+      <pre id="logs"></pre>
+    </section>
+
+    <div id="toast" class="toast" aria-live="polite"></div>
+  </main>
+  <script src="./app.js"></script>
+</body>
+</html>

@@ -7,12 +7,15 @@ import { saveAs } from "file-saver";
 import { useTranslation } from "react-i18next";
 
 import { AssetPickerModal, type InsertAssetPayload } from "@/components/canvas/asset-picker-modal";
+import { NewApiGenerationCost } from "@/components/canvas/new-api-generation-cost";
 import { ModelPicker } from "@/components/model-picker";
 import { PromptSelectDialog } from "@/components/prompts/prompt-select-dialog";
+import { VideoGenerationProgress } from "@/components/video-generation-progress";
 import { VideoSettingsPanel, normalizeVideoResolutionValue, normalizeVideoSizeValue, videoModeLabel, videoSizeLabel } from "@/components/video-settings-panel";
 import { canvasThemes } from "@/lib/canvas-theme";
 import { clampVideoSeconds } from "@/lib/media-size";
 import { formatBytes, formatDuration } from "@/lib/image-utils";
+import { estimateVideoGenerationMs } from "@/lib/video-generation-estimate";
 import { deleteStoredMedia, resolveMediaUrl } from "@/services/file-storage";
 import { resolveImageUrl, ensureImagePreview, getImagePreviewRevision, previewUrlFor, subscribeImagePreviews, uploadImage } from "@/services/image-storage";
 import { createVideoGenerationTask, pollVideoGenerationTask, storeGeneratedVideo, type VideoGenerationTask } from "@/services/api/video";
@@ -39,6 +42,10 @@ type GenerationResult = {
     status: "pending" | "success" | "failed";
     video?: GeneratedVideo;
     error?: string;
+    progress?: number;
+    progressPhase?: "queued" | "running" | "finalizing";
+    progressStartedAt?: number;
+    expectedMs?: number;
 };
 
 type GenerationLog = {
@@ -180,7 +187,7 @@ export default function VideoPage() {
         setRunning(true);
         if (agentTaskId) updateAgentTask(agentTaskId, { status: "running", error: undefined });
         setPreviewLog(null);
-        setResults([{ id: nanoid(), status: "pending" }]);
+        setResults([{ id: nanoid(), status: "pending", progressPhase: "queued", progressStartedAt: Date.now(), expectedMs: estimateVideoGenerationMs(snapshot.config) }]);
         const batchStartedAt = performance.now();
         setStartedAt(batchStartedAt);
         try {
@@ -316,7 +323,7 @@ export default function VideoPage() {
         activeLogIdsRef.current.add(log.id);
         setRunning(true);
         setStartedAt((value) => value || performance.now());
-        setResults((value) => (value.length ? value : [{ id: log.id, status: "pending" }]));
+        setResults((value) => (value.length ? value : [{ id: log.id, status: "pending", progressPhase: "queued", progressStartedAt: log.createdAt, expectedMs: estimateVideoGenerationMs({ ...effectiveConfig, ...log.config }) }]));
         const taskConfig = buildVideoConfig({ ...effectiveConfig, ...log.config }, log.task.model || log.model);
         try {
             for (let attempt = 0; attempt < 120; attempt += 1) {
@@ -340,6 +347,7 @@ export default function VideoPage() {
                     return;
                 }
                 if (state.status === "failed") throw new Error(state.error);
+                setResults((value) => value.map((item) => (item.status === "pending" ? { ...item, progress: state.progress, progressPhase: state.phase } : item)));
                 if (attempt === 119) throw new Error(t("videoWorkbench.timeout"));
                 await delay(2500);
             }
@@ -370,7 +378,13 @@ export default function VideoPage() {
         if (log.config.videoGenerateAudio) updateConfig("videoGenerateAudio", log.config.videoGenerateAudio);
         if (log.config.videoWatermark) updateConfig("videoWatermark", log.config.videoWatermark);
         if (log.config.videoMode) updateConfig("videoMode", log.config.videoMode);
-        setResults(log.status === "pending" ? [{ id: log.id, status: "pending" }] : log.video ? [{ id: log.video.id, status: "success", video: log.video }] : [{ id: log.id, status: "failed", error: log.error || t("workbench.generationFailed") }]);
+        setResults(
+            log.status === "pending"
+                ? [{ id: log.id, status: "pending", progressPhase: "queued", progressStartedAt: log.createdAt, expectedMs: estimateVideoGenerationMs({ ...effectiveConfig, ...log.config }) }]
+                : log.video
+                  ? [{ id: log.video.id, status: "success", video: log.video }]
+                  : [{ id: log.id, status: "failed", error: log.error || t("workbench.generationFailed") }],
+        );
     };
 
     return (
@@ -461,6 +475,9 @@ export default function VideoPage() {
                         </div>
 
                         <div className="mt-auto pt-6">
+                            <div className="mb-2 flex justify-end">
+                                <NewApiGenerationCost config={{ ...effectiveConfig, model }} mode="video" count={1} />
+                            </div>
                             <Button type="primary" size="large" block icon={<Sparkles className="size-4" />} loading={running} disabled={!canGenerate || running} onClick={() => void generate()}>
                                 {t("workbench.generate")}
                             </Button>
@@ -474,7 +491,7 @@ export default function VideoPage() {
                         </div>
                         {results.length ? (
                             <div className="grid gap-4">
-                                {results.map((result) => (result.status === "success" && result.video ? <ResultVideoCard key={result.id} video={result.video} onDownload={downloadVideo} onSaveAsset={saveResultToAssets} /> : result.status === "failed" ? <FailedVideoCard key={result.id} error={result.error || t("workbench.generationFailed")} onRetry={retryResult} /> : <PendingVideoCard key={result.id} />))}
+                                {results.map((result) => (result.status === "success" && result.video ? <ResultVideoCard key={result.id} video={result.video} onDownload={downloadVideo} onSaveAsset={saveResultToAssets} /> : result.status === "failed" ? <FailedVideoCard key={result.id} error={result.error || t("workbench.generationFailed")} onRetry={retryResult} /> : <PendingVideoCard key={result.id} result={result} />))}
                             </div>
                         ) : (
                             <div className="flex min-h-[320px] flex-col items-center justify-center rounded-lg border border-dashed border-stone-300 text-center dark:border-stone-700 lg:min-h-[560px]">
@@ -556,14 +573,10 @@ function ResultVideoCard({ video, onDownload, onSaveAsset }: { video: GeneratedV
     );
 }
 
-function PendingVideoCard() {
-    const { t } = useTranslation();
+function PendingVideoCard({ result }: { result: GenerationResult }) {
     return (
         <div className="relative aspect-video overflow-hidden rounded-lg border border-dashed border-stone-300 bg-stone-50 dark:border-stone-700 dark:bg-stone-900">
-            <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-sm text-stone-500 dark:text-stone-400">
-                <LoaderCircle className="size-6 animate-spin" />
-                <span>{t("workbench.generating")}</span>
-            </div>
+            <VideoGenerationProgress startedAt={result.progressStartedAt} expectedMs={result.expectedMs} progress={result.progress} phase={result.progressPhase} />
         </div>
     );
 }
