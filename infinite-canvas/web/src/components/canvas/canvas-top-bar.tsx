@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { BookOpen, Bot, Download, Home, Images, Menu, PanelLeftClose, PanelLeftOpen, Plus, Redo2, Trash2, Undo2, Upload } from "lucide-react";
+import { BookOpen, Bot, Download, FileArchive, Home, Images, Menu, PanelLeftClose, PanelLeftOpen, Plus, Redo2, Trash2, Undo2, Upload } from "lucide-react";
 import { Button, Dropdown, Modal, Tooltip } from "antd";
 import { useTranslation } from "react-i18next";
 
@@ -26,13 +26,16 @@ export function CanvasTopBar({
     onCreateProject,
     onDeleteProject,
     onExportProject,
+    onExportSelection,
     onImportImage,
+    onImportCanvas,
     onOpenPlugins,
     onUndo,
     onRedo,
     agentOpen,
     compactAgentStatus,
     onToggleAgent,
+    selectedCount,
 }: {
     title: string;
     contextLabel?: string | null;
@@ -50,13 +53,16 @@ export function CanvasTopBar({
     onCreateProject: () => void;
     onDeleteProject: () => void;
     onExportProject: () => void;
+    onExportSelection: () => void;
     onImportImage: () => void;
+    onImportCanvas: () => void;
     onOpenPlugins: () => void;
     onUndo: () => void;
     onRedo: () => void;
     agentOpen: boolean;
     compactAgentStatus: { connected: boolean; enabled: boolean; activity: string };
     onToggleAgent: () => void;
+    selectedCount: number;
 }) {
     const colorTheme = useThemeStore((state) => state.theme);
     const { t } = useTranslation();
@@ -102,8 +108,10 @@ export function CanvasTopBar({
                                 { key: "new", icon: <Plus className="size-4" />, label: t("canvas.create"), onClick: onCreateProject },
                                 { key: "delete", danger: true, icon: <Trash2 className="size-4" />, label: t("canvas.deleteCurrent"), onClick: onDeleteProject },
                                 { type: "divider" },
-                                { key: "import", icon: <Upload className="size-4" />, label: t("canvas.importAsset"), onClick: onImportImage },
-                                { key: "export", icon: <Download className="size-4" />, label: t("canvas.exportCurrent"), onClick: onExportProject },
+                                { key: "import-assets", icon: <Upload className="size-4" />, label: t("canvas.importAsset"), onClick: onImportImage },
+                                { key: "import-canvas", icon: <FileArchive className="size-4" />, label: t("canvas.importCanvasContent"), onClick: onImportCanvas },
+                                { key: "export-current", icon: <Download className="size-4" />, label: t("canvas.exportCurrent"), onClick: onExportProject },
+                                { key: "export-selected", icon: <Download className="size-4" />, label: t("canvas.exportSelectedContent"), onClick: onExportSelection, disabled: !selectedCount },
                                 { type: "divider" },
                                 { key: "undo", disabled: !canUndo, icon: <Undo2 className="size-4" />, label: <MenuLabel text={t("canvas.undo")} shortcut="⌘ Z" />, onClick: onUndo },
                                 { key: "redo", disabled: !canRedo, icon: <Redo2 className="size-4" />, label: <MenuLabel text={t("canvas.redo")} shortcut="⌘ ⇧ Z / ⌘ Y" />, onClick: onRedo },
@@ -149,8 +157,9 @@ export function CanvasTopBar({
                         <span className="mx-1 h-4 w-px shrink-0" style={{ background: theme.toolbar.border }} />
                         <CanvasMenuButton icon={<Plus className="size-3.5" />} label={t("canvas.toolbarCreate")} onClick={onCreateProject} iconOnly />
                         <CanvasMenuButton icon={<Trash2 className="size-3.5" />} label={t("canvas.toolbarDelete")} onClick={onDeleteProject} danger iconOnly />
-                        <CanvasMenuButton icon={<Upload className="size-3.5" />} label={t("canvas.toolbarImport")} onClick={onImportImage} iconOnly />
-                        <CanvasMenuButton icon={<Download className="size-3.5" />} label={t("canvas.toolbarExport")} onClick={onExportProject} iconOnly />
+                        <CanvasMenuButton icon={<Upload className="size-3.5" />} label={t("canvas.toolbarImportAsset")} onClick={onImportImage} iconOnly />
+                        <CanvasMenuButton icon={<FileArchive className="size-3.5" />} label={t("canvas.toolbarImportCanvas")} onClick={onImportCanvas} iconOnly />
+                        <CanvasExportMenu iconOnly canExportSelection={selectedCount > 0} onExportCurrent={onExportProject} onExportSelection={onExportSelection} />
                         <span className="mx-1 h-4 w-px shrink-0" style={{ background: theme.toolbar.border }} />
                         <CanvasMenuButton icon={<Undo2 className="size-3.5" />} label={t("canvas.undo")} onClick={onUndo} disabled={!canUndo} iconOnly />
                         <CanvasMenuButton icon={<Redo2 className="size-3.5" />} label={t("canvas.redo")} onClick={onRedo} disabled={!canRedo} iconOnly />
@@ -161,8 +170,9 @@ export function CanvasTopBar({
                         <span className="mx-1 h-4 w-px shrink-0" style={{ background: theme.toolbar.border }} />
                         <CanvasMenuButton icon={<Plus className="size-3.5" />} label={t("canvas.toolbarCreate")} onClick={onCreateProject} />
                         <CanvasMenuButton icon={<Trash2 className="size-3.5" />} label={t("canvas.toolbarDelete")} onClick={onDeleteProject} danger />
-                        <CanvasMenuButton icon={<Upload className="size-3.5" />} label={t("canvas.toolbarImport")} onClick={onImportImage} />
-                        <CanvasMenuButton icon={<Download className="size-3.5" />} label={t("canvas.toolbarExport")} onClick={onExportProject} />
+                        <CanvasMenuButton icon={<Upload className="size-3.5" />} label={t("canvas.toolbarImportAsset")} onClick={onImportImage} />
+                        <CanvasMenuButton icon={<FileArchive className="size-3.5" />} label={t("canvas.toolbarImportCanvas")} onClick={onImportCanvas} />
+                        <CanvasExportMenu canExportSelection={selectedCount > 0} onExportCurrent={onExportProject} onExportSelection={onExportSelection} />
                         <span className="mx-1 h-4 w-px shrink-0" style={{ background: theme.toolbar.border }} />
                         <CanvasMenuButton icon={<Undo2 className="size-3.5" />} label={t("canvas.undo")} onClick={onUndo} disabled={!canUndo} iconOnly />
                         <CanvasMenuButton icon={<Redo2 className="size-3.5" />} label={t("canvas.redo")} onClick={onRedo} disabled={!canRedo} iconOnly />
@@ -223,6 +233,34 @@ function CanvasMenuButton({ icon, label, onClick, disabled = false, danger = fal
                 {iconOnly ? null : <span>{label}</span>}
             </button>
         </Tooltip>
+    );
+}
+
+function CanvasExportMenu({ canExportSelection, onExportCurrent, onExportSelection, iconOnly = false }: { canExportSelection: boolean; onExportCurrent: () => void; onExportSelection: () => void; iconOnly?: boolean }) {
+    const colorTheme = useThemeStore((state) => state.theme);
+    const theme = canvasThemes[colorTheme];
+    const { t } = useTranslation();
+    const label = t("canvas.toolbarExport");
+    return (
+        <Dropdown
+            trigger={["click"]}
+            menu={{
+                items: [
+                    { key: "current", icon: <Download className="size-4" />, label: t("canvas.exportCurrent"), onClick: onExportCurrent },
+                    { key: "selected", icon: <Download className="size-4" />, label: t("canvas.exportSelectedContent"), onClick: onExportSelection, disabled: !canExportSelection },
+                ],
+            }}
+        >
+            <button
+                type="button"
+                className={`flex h-8 shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-md px-2 text-xs transition hover:bg-black/5 dark:hover:bg-white/10 ${iconOnly ? "w-8" : ""}`}
+                style={{ color: theme.node.text }}
+                aria-label={label}
+            >
+                <Download className="size-3.5" />
+                {iconOnly ? null : <span>{label}</span>}
+            </button>
+        </Dropdown>
     );
 }
 

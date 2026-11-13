@@ -46,14 +46,14 @@ export function NewApiGenerationCost({ config, mode, count, hasVideoReference = 
             disposed = true;
             controller.abort();
         };
-    }, [channel.apiKey, channel.baseUrl, config.model, config.size, config.videoGenerateAudio, config.videoSeconds, config.vquality, count, hasVideoReference, mode]);
+    }, [channel.apiKey, channel.baseUrl, config.model, config.size, config.videoDurationMode, config.videoGenerateAudio, config.videoSeconds, config.vquality, count, hasVideoReference, mode]);
 
     if (mode !== "image" && mode !== "video") return null;
 
     const formattedTotal = estimate ? formatMoney(estimate.total, estimate.currency, i18n.resolvedLanguage === "zh-CN", 2) : "--";
     const detail =
         estimate && mode === "video" && estimate.usage
-            ? t("costEstimate.videoDetail", {
+            ? t(estimate.usage.automatic ? "costEstimate.videoDetailAuto" : "costEstimate.videoDetail", {
                   seconds: estimate.usage.seconds,
                   resolution: estimate.usage.resolution,
                   total: formatMoney(estimate.total, estimate.currency, i18n.resolvedLanguage === "zh-CN", 4),

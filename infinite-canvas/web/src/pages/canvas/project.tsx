@@ -51,7 +51,8 @@ import { useCanvasStore } from "@/stores/canvas/use-canvas-store";
 import { useAgentBridge } from "@/pages/canvas/hooks/use-agent-bridge";
 import { usePluginHost } from "@/pages/canvas/hooks/use-plugin-host";
 import { buildNodeMentionReferences, getGroupResourceNodes, isCanvasReferenceNode, type CanvasResourceReference } from "@/lib/canvas/canvas-resource-references";
-import { exportCanvasProjects } from "@/lib/canvas/canvas-export";
+import { exportCanvasProjects, exportSelectedCanvasContent } from "@/lib/canvas/canvas-export";
+import { mergeCanvasArchiveIntoCanvas } from "@/lib/canvas/canvas-import";
 import { applyNodeConfigPatch, audioMetadata, buildAudioGenerationMetadata, buildImageGenerationMetadata, createCanvasNode, imageMetadata, videoMetadata } from "@/lib/canvas/canvas-node-factory";
 import {
     applyGroupSelection,
@@ -201,6 +202,8 @@ function InfiniteCanvasPage() {
     const openAgentPanel = useAgentStore((state) => state.openPanel);
     const containerRef = useRef<HTMLDivElement>(null);
     const imageInputRef = useRef<HTMLInputElement>(null);
+    const canvasImportInputRef = useRef<HTMLInputElement>(null);
+    const canvasImportingRef = useRef(false);
     const uploadTargetRef = useRef<{ nodeId?: string; position?: Position } | null>(null);
     const clipboardRef = useRef<CanvasClipboard | null>(null);
     const historyRef = useRef<{ past: CanvasHistoryEntry[]; future: CanvasHistoryEntry[] }>({ past: [], future: [] });
@@ -459,6 +462,7 @@ function InfiniteCanvasPage() {
                                   model: generationConfig.model,
                                   size: generationConfig.size,
                                   seconds: generationConfig.videoSeconds,
+                                  videoDurationMode: generationConfig.videoDurationMode,
                                   vquality: generationConfig.vquality,
                                   generateAudio: generationConfig.videoGenerateAudio,
                                   watermark: generationConfig.videoWatermark,
@@ -1326,6 +1330,21 @@ function InfiniteCanvasPage() {
         try {
             await exportCanvasProjects([project], project.title || t("canvas.title"));
             message.success(t("canvas.projectPage.exported"));
+        } catch (error) {
+            console.error(error);
+            message.error(t("canvas.sidePanel.exportFailed"));
+        } finally {
+            hide();
+        }
+    }, [message, projectId, t]);
+
+    const exportSelectedContent = useCallback(async () => {
+        const project = useCanvasStore.getState().projects.find((item) => item.id === projectId);
+        if (!project || !selectedNodeIdsRef.current.size) return;
+        const hide = message.loading(t("canvas.exportingSelectedContent"), 0);
+        try {
+            const count = await exportSelectedCanvasContent(project, nodesRef.current, connectionsRef.current, selectedNodeIdsRef.current);
+            if (count) message.success(t("canvas.exportedSelectedContent", { count }));
         } catch (error) {
             console.error(error);
             message.error(t("canvas.sidePanel.exportFailed"));
@@ -2291,6 +2310,53 @@ function InfiniteCanvasPage() {
         imageInputRef.current?.click();
     }, []);
 
+    const handleImportCanvasContent = useCallback(
+        async (file?: File) => {
+            if (!file || canvasImportingRef.current) return;
+            canvasImportingRef.current = true;
+            const messageKey = `canvas-import-${Date.now()}`;
+            message.loading({ content: t("canvas.importingCanvas"), key: messageKey, duration: 0 });
+            try {
+                const result = await mergeCanvasArchiveIntoCanvas(file, {
+                    targetProjectId: projectId,
+                    teamProjectId: currentProject?.teamProjectId || undefined,
+                    currentNodes: nodesRef.current,
+                    viewport: viewportRef.current,
+                    viewportSize: size,
+                });
+                const nextNodes = [...nodesRef.current, ...result.nodes];
+                const nextConnections = [...connectionsRef.current, ...result.connections];
+                nodesRef.current = nextNodes;
+                connectionsRef.current = nextConnections;
+                setNodes(nextNodes);
+                setConnections(nextConnections);
+                setSelectedNodeIds(new Set(result.nodes.map((node) => node.id)));
+                setSelectedConnectionId(null);
+                setDialogNodeId(null);
+                message.success({
+                    content: t("canvas.importCanvasSuccess", {
+                        title: result.sourceTitle,
+                        nodes: result.nodes.length,
+                        connections: result.connections.length,
+                    }),
+                    key: messageKey,
+                });
+                if (result.warnings.length) {
+                    message.warning(t("canvas.importCanvasPartial", { count: result.warnings.length }));
+                }
+            } catch (error) {
+                message.error({
+                    content: error instanceof Error ? error.message : t("canvas.importFailed"),
+                    key: messageKey,
+                });
+            } finally {
+                canvasImportingRef.current = false;
+                if (canvasImportInputRef.current) canvasImportInputRef.current.value = "";
+            }
+        },
+        [currentProject?.teamProjectId, message, projectId, size, t],
+    );
+
     const handleImageInputChange = useCallback(
         async (event: ReactChangeEvent<HTMLInputElement>) => {
             const files = Array.from(event.target.files || []).filter((f) => f.type.startsWith("image/") || f.type.startsWith("video/") || isAudioFile(f));
@@ -2702,6 +2768,7 @@ function InfiniteCanvasPage() {
                             model: generationConfig.model,
                             size: generationConfig.size,
                             seconds: generationConfig.videoSeconds,
+                            videoDurationMode: generationConfig.videoDurationMode,
                             vquality: generationConfig.vquality,
                             generateAudio: generationConfig.videoGenerateAudio,
                             watermark: generationConfig.videoWatermark,
@@ -2731,6 +2798,7 @@ function InfiniteCanvasPage() {
                             {
                                 size: generationConfig.size,
                                 seconds: generationConfig.videoSeconds,
+                                videoDurationMode: generationConfig.videoDurationMode,
                                 vquality: generationConfig.vquality,
                                 generateAudio: generationConfig.videoGenerateAudio,
                                 watermark: generationConfig.videoWatermark,
@@ -3041,6 +3109,7 @@ function InfiniteCanvasPage() {
                         {
                             size: generationConfig.size,
                             seconds: generationConfig.videoSeconds,
+                            videoDurationMode: generationConfig.videoDurationMode,
                             vquality: generationConfig.vquality,
                             generateAudio: generationConfig.videoGenerateAudio,
                             watermark: generationConfig.videoWatermark,
@@ -3407,13 +3476,16 @@ function InfiniteCanvasPage() {
                     onCreateProject={createAndOpenProject}
                     onDeleteProject={deleteCurrentProject}
                     onExportProject={exportCurrentProject}
+                    onExportSelection={exportSelectedContent}
                     onImportImage={() => handleUploadRequest()}
+                    onImportCanvas={() => canvasImportInputRef.current?.click()}
                     onOpenPlugins={() => setPluginManagerOpen(true)}
                     onUndo={undoCanvas}
                     onRedo={redoCanvas}
                     agentOpen={agentPanelOpen}
                     compactAgentStatus={{ connected: localAgentConnected, enabled: localAgentEnabled, activity: localAgentActivity }}
                     onToggleAgent={toggleAgentPanel}
+                    selectedCount={selectedNodeIds.size}
                 />
 
                 <InfiniteCanvas
@@ -3597,7 +3669,7 @@ function InfiniteCanvasPage() {
                 />
 
                 {hasMultipleSelectedNodes && !selectionBox ? (
-                    <CanvasSelectionToolbar nodes={selectedNodes} viewport={viewport} showToolbar={!isNodeDragging && !isNodeResizing} canGroup={canGroupSelection} canUngroup={canUngroupSelection} onGroup={groupSelection} onUngroup={ungroupSelection} />
+                    <CanvasSelectionToolbar nodes={selectedNodes} viewport={viewport} showToolbar={!isNodeDragging && !isNodeResizing} canGroup={canGroupSelection} canUngroup={canUngroupSelection} onGroup={groupSelection} onUngroup={ungroupSelection} onExport={exportSelectedContent} />
                 ) : null}
 
                 <CanvasToolbar
@@ -3635,6 +3707,7 @@ function InfiniteCanvasPage() {
                         canCaptureVideoFrame={contextMenuNode?.type === CanvasNodeType.Video && Boolean(contextMenuNode.metadata?.content)}
                         canGroup={contextMenu.type === "node" && canGroupSelection}
                         canUngroup={contextMenu.type === "node" && canUngroupSelection}
+                        canExport={contextMenu.type === "node" && selectedNodeIds.size > 0}
                         onClose={() => setContextMenu(null)}
                         onCaptureVideoFrame={(position) => {
                             if (contextMenu.type !== "node") return;
@@ -3647,6 +3720,14 @@ function InfiniteCanvasPage() {
                         }}
                         onGroup={groupSelection}
                         onUngroup={ungroupSelection}
+                        onExport={
+                            contextMenu.type === "node"
+                                ? () => {
+                                      setContextMenu(null);
+                                      void exportSelectedContent();
+                                  }
+                                : undefined
+                        }
                         onDelete={() => {
                             if (contextMenu.type === "node") {
                                 deleteNodes(new Set([contextMenu.nodeId]));
@@ -3659,6 +3740,7 @@ function InfiniteCanvasPage() {
                 ) : null}
 
                 <input ref={imageInputRef} type="file" multiple accept="image/*,video/*,audio/mpeg,audio/wav,audio/x-wav,.mp3,.wav" className="hidden" onChange={handleImageInputChange} />
+                <input ref={canvasImportInputRef} type="file" accept="application/zip,.zip" className="hidden" onChange={(event) => void handleImportCanvasContent(event.target.files?.[0])} />
 
                 <CanvasNodeInfoModal node={infoNode} open={Boolean(infoNode)} onClose={() => setInfoNodeId(null)} />
                 <CanvasPluginManagerModal open={pluginManagerOpen} onClose={() => setPluginManagerOpen(false)} />

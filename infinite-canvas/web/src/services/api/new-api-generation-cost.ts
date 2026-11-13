@@ -20,7 +20,7 @@ export type GenerationCostEstimate = {
     unit: number;
     imageCount: number;
     currency: "CNY" | "USD";
-    usage?: Pick<VideoBillingUsage, "seconds" | "resolution">;
+    usage?: Pick<VideoBillingUsage, "seconds" | "resolution" | "automatic">;
 };
 
 type GenerationCostRequest = {
@@ -75,7 +75,7 @@ export async function fetchGenerationCost({ config, mode, count, hasVideoReferen
         total,
         imageCount,
         currency,
-        ...(videoUsage ? { usage: { seconds: videoUsage.seconds, resolution: videoUsage.resolution } } : {}),
+        ...(videoUsage ? { usage: { seconds: videoUsage.seconds, resolution: videoUsage.resolution, automatic: videoUsage.automatic } } : {}),
     };
 }
 

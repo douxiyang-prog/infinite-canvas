@@ -6,7 +6,7 @@ import { getMediaBlob } from "@/services/file-storage";
 import { getImageBlob } from "@/services/image-storage";
 import type { CanvasExportAsset, CanvasExportFile } from "@/types/canvas-export";
 import type { CanvasProject } from "@/stores/canvas/use-canvas-store";
-import { CanvasNodeType, type CanvasNodeData } from "@/types/canvas";
+import { CanvasNodeType, type CanvasConnection, type CanvasNodeData } from "@/types/canvas";
 
 export async function exportCanvasProjects(projects: CanvasProject[], fileName = i18n.t("canvas.export.defaultProjectName")) {
     const zipFiles: { name: string; data: BlobPart }[] = [];
@@ -29,6 +29,20 @@ export async function exportCanvasProjects(projects: CanvasProject[], fileName =
     const data: CanvasExportFile = { app: "infinite-canvas", version: 3, exportedAt: new Date().toISOString(), projects: exportedProjects };
     const zip = await createZip([{ name: "projects.json", data: JSON.stringify(data, null, 2) }, ...zipFiles]);
     saveAs(zip, `${safeFileName(fileName)}.zip`);
+}
+
+export async function exportSelectedCanvasContent(project: CanvasProject, nodes: CanvasNodeData[], connections: CanvasConnection[], selectedNodeIds: Iterable<string>) {
+    const selection = resolveSelectionExport(nodes, connections, selectedNodeIds);
+    if (!selection.nodes.length) return 0;
+    const selectedProject: CanvasProject = {
+        ...project,
+        nodes: selection.nodes,
+        connections: selection.connections,
+        chatSessions: [],
+        activeChatId: null,
+    };
+    await exportCanvasProjects([selectedProject], `${project.title || i18n.t("canvas.title")}-${i18n.t("canvas.export.selectedSuffix")}-${selection.nodes.length}`);
+    return selection.nodes.length;
 }
 
 export async function exportCanvasNodes(nodes: CanvasNodeData[], fileName = i18n.t("canvas.export.defaultNodesName")) {
@@ -62,6 +76,32 @@ export async function exportCanvasNodes(nodes: CanvasNodeData[], fileName = i18n
 
     const zip = await createZip(zipFiles);
     saveAs(zip, `${safeFileName(fileName)}.zip`);
+}
+
+function resolveSelectionExport(nodes: CanvasNodeData[], connections: CanvasConnection[], selectedNodeIds: Iterable<string>) {
+    const includedIds = new Set(selectedNodeIds);
+    let changed = true;
+    while (changed) {
+        changed = false;
+        for (const node of nodes) {
+            const groupId = node.metadata?.groupId;
+            if (includedIds.has(node.id) && groupId && !includedIds.has(groupId)) {
+                includedIds.add(groupId);
+                changed = true;
+            }
+            if (node.type === CanvasNodeType.Group && includedIds.has(node.id)) {
+                for (const child of nodes) {
+                    if (child.metadata?.groupId === node.id && !includedIds.has(child.id)) {
+                        includedIds.add(child.id);
+                        changed = true;
+                    }
+                }
+            }
+        }
+    }
+    const selectedNodes = nodes.filter((node) => includedIds.has(node.id));
+    const selectedConnections = connections.filter((connection) => includedIds.has(connection.fromNodeId) && includedIds.has(connection.toNodeId));
+    return { nodes: selectedNodes, connections: selectedConnections };
 }
 
 function collectStorageKeys(value: unknown, keys = new Set<string>()) {

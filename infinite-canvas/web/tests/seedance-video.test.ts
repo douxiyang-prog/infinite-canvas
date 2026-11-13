@@ -1,12 +1,13 @@
 import { expect, test } from "bun:test";
 
-import { defaultConfig } from "../src/stores/use-config-store";
+import { defaultConfig, resolveVideoDurationMode } from "../src/stores/use-config-store";
 import { buildSeedanceVideoContent, buildSeedanceVideoMetadata, buildSeedanceVideoSeconds } from "../src/services/api/video";
 
 const config = {
     ...defaultConfig,
     size: "9:16",
     vquality: "1080",
+    videoSeconds: "4",
 };
 
 test("first-frame and first-last-frame Seedance requests omit ratio", () => {
@@ -19,10 +20,16 @@ test("text and reference Seedance requests keep the selected ratio", () => {
     expect(metadata.ratio).toBe("9:16");
 });
 
-test("Seedance video editing follows the input video ratio and duration", () => {
+test("Seedance video editing follows the input video ratio without overriding a fixed duration", () => {
     const metadata = buildSeedanceVideoMetadata(config, [], false, true);
     expect(metadata.ratio).toBe("adaptive");
-    expect(buildSeedanceVideoSeconds(config, true)).toBe(-1);
+    expect(buildSeedanceVideoSeconds(config)).toBe(4);
+});
+
+test("Seedance automatic duration sends -1 only when the mode is auto", () => {
+    expect(buildSeedanceVideoSeconds({ ...config, videoDurationMode: "auto" })).toBe(-1);
+    expect(resolveVideoDurationMode({ ...config, videoDurationMode: "auto", model: "provider::doubao-seedance-2.0" })).toBe("auto");
+    expect(resolveVideoDurationMode({ ...config, videoDurationMode: "auto", model: "provider::grok-video" })).toBe("fixed");
 });
 
 test("Seedance frame content uses first_frame and last_frame roles", () => {

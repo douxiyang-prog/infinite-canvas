@@ -212,11 +212,12 @@ function deleteImagePreview(storageKey: string) {
     previewUrls.delete(storageKey);
 }
 
-export async function setImageBlob(storageKey: string, blob: Blob, options?: { teamProjectId?: string }) {
+export async function setImageBlob(storageKey: string, blob: Blob, options?: { projectId?: string; teamProjectId?: string }) {
     await uploadCanvasFile(blob, {
         area: "input",
         kind: "image",
         storageKey,
+        projectId: options?.projectId,
         teamProjectId: options?.teamProjectId,
     });
     deleteImagePreview(storageKey);

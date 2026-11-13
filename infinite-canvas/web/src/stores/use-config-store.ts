@@ -7,6 +7,7 @@ import i18n from "@/i18n";
 export type ApiCallFormat = "openai" | "gemini";
 export type ModelCapability = "image" | "video" | "text" | "audio";
 export type ReasoningEffort = "auto" | "low" | "medium" | "high" | "xhigh";
+export type VideoDurationMode = "fixed" | "auto";
 
 export type ChannelModel = {
     name: string;
@@ -39,6 +40,7 @@ export type AiConfig = {
     audioSpeed: string;
     audioInstructions: string;
     videoSeconds: string;
+    videoDurationMode: VideoDurationMode;
     vquality: string;
     videoGenerateAudio: string;
     videoWatermark: string;
@@ -119,6 +121,7 @@ export const defaultConfig: AiConfig = {
     audioSpeed: "1",
     audioInstructions: "",
     videoSeconds: "6",
+    videoDurationMode: "fixed",
     vquality: "720",
     videoGenerateAudio: "true",
     videoWatermark: "false",
@@ -251,6 +254,7 @@ function normalizeGlobalConfig(persistedConfigInput: Partial<AiConfig> | null | 
             audioInstructions: config.audioInstructions || "",
             reasoningEffort: config.reasoningEffort || "auto",
             videoSeconds: config.videoSeconds || "6",
+            videoDurationMode: config.videoDurationMode === "auto" ? "auto" : "fixed",
             vquality: config.vquality || "720",
             videoGenerateAudio: config.videoGenerateAudio || "true",
             videoWatermark: config.videoWatermark || "false",
@@ -423,6 +427,10 @@ export function decodeChannelModel(value: string) {
 
 export function modelOptionName(value: string) {
     return decodeChannelModel(value)?.model || value;
+}
+
+export function resolveVideoDurationMode(config: Pick<AiConfig, "model" | "videoModel" | "videoDurationMode">): VideoDurationMode {
+    return config.videoDurationMode === "auto" && /seedance/i.test(modelOptionName(config.model || config.videoModel)) ? "auto" : "fixed";
 }
 
 export function modelOptionLabel(config: AiConfig, value: string) {

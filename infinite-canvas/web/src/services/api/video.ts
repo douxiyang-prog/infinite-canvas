@@ -114,7 +114,7 @@ async function createPluginVideoTask(config: AiConfig, model: string, script: st
             videos,
             audios,
             params: {
-                seconds: normalizeVideoSeconds(config.videoSeconds),
+                seconds: isSeedanceVideoModel(model) ? buildSeedanceVideoSeconds(config) : normalizeVideoSeconds(config.videoSeconds),
                 size: normalizeVideoSize(config.size, config.vquality),
                 resolution: normalizeVideoResolution(config.vquality),
                 ratio: videoAspectRatio(config.size),
@@ -214,7 +214,7 @@ async function createSeedanceVideoTask(config: AiConfig, model: string, prompt: 
                     {
                         model: modelOptionName(model),
                         prompt,
-                        seconds: buildSeedanceVideoSeconds(config, followsInputVideo),
+                        seconds: buildSeedanceVideoSeconds(config),
                         metadata: buildSeedanceVideoMetadata(config, content, followsFrameRatio, followsInputVideo),
                     },
                     { headers: aiHeaders(config, "application/json"), signal: options?.signal },
@@ -238,8 +238,9 @@ export function buildSeedanceVideoMetadata(config: AiConfig, content: Array<Reco
     };
 }
 
-export function buildSeedanceVideoSeconds(config: AiConfig, followsInputVideo: boolean) {
-    return followsInputVideo ? -1 : Number(normalizeVideoSeconds(config.videoSeconds)) || 8;
+export function buildSeedanceVideoSeconds(config: AiConfig) {
+    if (config.videoDurationMode === "auto") return -1;
+    return Number(normalizeVideoSeconds(config.videoSeconds)) || 5;
 }
 
 export function buildSeedanceVideoContent(prompt: string, images: string[], videos: string[], audios: string[], mode: "frames" | "reference") {

@@ -70,7 +70,7 @@ export function usePluginHost(params: PluginHostParams) {
                     ...buildGenerationConfig(effectiveConfig, undefined, "video"),
                     ...(options?.model ? { model: options.model } : {}),
                     ...(options?.size ? { size: options.size } : {}),
-                    ...(options?.seconds ? { videoSeconds: options.seconds } : {}),
+                    ...(options?.seconds ? { videoSeconds: options.seconds, videoDurationMode: "fixed" as const } : {}),
                 };
                 ensureReady(config);
                 const file = await storeGeneratedVideo(await requestVideoGeneration(config, prompt, toReferences(options?.references), { signal: options?.signal }));

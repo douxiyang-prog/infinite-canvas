@@ -63,11 +63,12 @@ export async function getMediaBlob(storageKey: string) {
     }
 }
 
-export async function setMediaBlob(storageKey: string, blob: Blob, options?: { teamProjectId?: string }) {
+export async function setMediaBlob(storageKey: string, blob: Blob, options?: { projectId?: string; teamProjectId?: string }) {
     await uploadCanvasFile(blob, {
         area: "input",
         storageKey,
         kind: mediaKind(storageKey.split(":")[0] || "file", blob),
+        projectId: options?.projectId,
         teamProjectId: options?.teamProjectId,
     });
     return canvasFileUrl(storageKey);

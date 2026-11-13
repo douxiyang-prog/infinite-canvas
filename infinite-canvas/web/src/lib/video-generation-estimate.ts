@@ -1,5 +1,5 @@
 import { clampVideoSeconds, parseVideoResolution } from "@/lib/media-size";
-import { modelOptionName, type AiConfig } from "@/stores/use-config-store";
+import { modelOptionName, resolveVideoDurationMode, type AiConfig } from "@/stores/use-config-store";
 
 const SEEDANCE_RESOLUTION_PIXELS: Record<string, [number, number]> = {
     "480p": [854, 480],
@@ -30,6 +30,7 @@ const VIDEO_DURATION_ANCHORS = [
 export type VideoBillingUsage = {
     seconds: number;
     duration: number;
+    automatic: boolean;
     resolution: string;
     tokens: number;
     video_input: "none" | "video";
@@ -40,11 +41,12 @@ export type VideoBillingUsage = {
 export function buildVideoBillingUsage(config: AiConfig, hasReferenceVideo: boolean): VideoBillingUsage {
     const model = modelOptionName(config.model || config.videoModel);
     const resolution = `${parseVideoResolution(config.vquality)}p`;
-    const seconds = relevantVideoSeconds(model, config.videoSeconds, hasReferenceVideo);
+    const seconds = resolveVideoEstimateSeconds(config, model);
     const [width, height] = SEEDANCE_RESOLUTION_PIXELS[resolution] || SEEDANCE_RESOLUTION_PIXELS["720p"];
     return {
         seconds,
         duration: seconds,
+        automatic: resolveVideoDurationMode(config) === "auto",
         resolution,
         tokens: Math.round((seconds * width * height * 24) / 1024),
         video_input: hasReferenceVideo ? "video" : "none",
@@ -55,7 +57,7 @@ export function buildVideoBillingUsage(config: AiConfig, hasReferenceVideo: bool
 
 export function estimateVideoGenerationMs(config: AiConfig): number {
     const model = modelOptionName(config.model || config.videoModel);
-    const seconds = Number(clampVideoSeconds(config.videoSeconds));
+    const seconds = resolveVideoEstimateSeconds(config, model);
     const resolution = parseVideoResolution(config.vquality);
     const seedance = /seedance/i.test(model);
     const modelMultiplier = /seedance-2\.5/i.test(model) ? 1.3 : seedance ? 1 : 1.1;
@@ -73,11 +75,11 @@ export function estimatedVideoProgress(startedAt: number | undefined, expectedMs
     return Math.min(92, Math.max(10, Math.round(10 + (1 - Math.exp(-2.2 * ratio)) * 82)));
 }
 
-function relevantVideoSeconds(model: string, value: string, hasReferenceVideo: boolean) {
-    if (hasReferenceVideo && /seedance/i.test(model)) {
+export function resolveVideoEstimateSeconds(config: AiConfig, model = modelOptionName(config.model || config.videoModel)) {
+    if (resolveVideoDurationMode({ ...config, model }) === "auto") {
         return SEEDANCE_MAX_SECONDS[model] || 30;
     }
-    return Number(clampVideoSeconds(value));
+    return Number(clampVideoSeconds(config.videoSeconds));
 }
 
 function interpolateExpectedSeconds(seconds: number) {

@@ -6,7 +6,7 @@ import i18n from "@/i18n";
 import { ImageSettingsTheme } from "@/components/image-settings-panel";
 import { type CanvasTheme } from "@/lib/canvas-theme";
 import { clampVideoSeconds, computeVideoSize, inferVideoRatio, parseVideoResolution, readVideoDimensions, VIDEO_SECONDS_MAX, VIDEO_SECONDS_MIN, videoRatioOptions } from "@/lib/media-size";
-import { type AiConfig } from "@/stores/use-config-store";
+import { modelOptionName, resolveVideoDurationMode, type AiConfig, type VideoDurationMode } from "@/stores/use-config-store";
 
 const resolutionOptions = [
     { value: "480", label: "480p" },
@@ -17,6 +17,10 @@ const videoModeOptions = [
     { value: "frames", labelKey: "frames" },
     { value: "reference", labelKey: "reference" },
 ];
+const durationModeOptions: Array<{ value: VideoDurationMode; labelKey: "fixed" | "auto" }> = [
+    { value: "fixed", labelKey: "fixed" },
+    { value: "auto", labelKey: "auto" },
+];
 
 export const videoResolutionOptions = resolutionOptions.map((item) => ({ value: item.value, label: item.label }));
 export const videoSizeOptions = videoRatioOptions.map((item) => ({ value: item.value, get label() { return item.value === "auto" ? i18n.t("settingsPanels.common.auto") : item.value; } }));
@@ -24,7 +28,7 @@ export const videoSecondsRange = { min: VIDEO_SECONDS_MIN, max: VIDEO_SECONDS_MA
 
 type VideoSettingsPanelProps = {
     config: AiConfig;
-    onConfigChange: (key: "vquality" | "size" | "videoSeconds" | "videoGenerateAudio" | "videoWatermark" | "videoMode", value: string) => void;
+    onConfigChange: (key: "vquality" | "size" | "videoSeconds" | "videoDurationMode" | "videoGenerateAudio" | "videoWatermark" | "videoMode", value: string) => void;
     theme: CanvasTheme;
     showTitle?: boolean;
     className?: string;
@@ -34,6 +38,9 @@ export function VideoSettingsPanel({ config, onConfigChange, theme, showTitle = 
     const { t } = useTranslation();
     const seconds = Number(clampVideoSeconds(config.videoSeconds || "6"));
     const videoMode = normalizeVideoModeValue(config.videoMode);
+    const supportsDurationMode = /seedance/i.test(modelOptionName(config.model || config.videoModel));
+    const durationMode = resolveVideoDurationMode(config);
+    const automaticDuration = supportsDurationMode && durationMode === "auto";
     const resolution = parseVideoResolution(config.vquality);
     const selectedRatio = inferVideoRatio(config.size || "auto");
     const dimensions = readVideoDimensions(config.size || "auto", resolution, selectedRatio);
@@ -84,12 +91,24 @@ export function VideoSettingsPanel({ config, onConfigChange, theme, showTitle = 
                         ))}
                     </div>
                 </SettingGroup>
+                {supportsDurationMode ? (
+                    <SettingGroup title={t("settingsPanels.video.durationMode")} color={theme.node.muted}>
+                        <div className="grid grid-cols-2 gap-2.5">
+                            {durationModeOptions.map((item) => (
+                                <OptionPill key={item.value} selected={durationMode === item.value} theme={theme} onClick={() => onConfigChange("videoDurationMode", item.value)}>
+                                    {t(`settingsPanels.video.durationModes.${item.labelKey}`)}
+                                </OptionPill>
+                            ))}
+                        </div>
+                    </SettingGroup>
+                ) : null}
                 <SettingGroup title={t("settingsPanels.video.seconds")} color={theme.node.muted}>
-                    <div className="flex items-center gap-3" onMouseDown={(event) => event.stopPropagation()}>
-                        <Slider className="min-w-0 flex-1" min={VIDEO_SECONDS_MIN} max={VIDEO_SECONDS_MAX} step={1} value={seconds} onChange={(value) => onConfigChange("videoSeconds", String(Array.isArray(value) ? value[0] : value))} />
-                        <SecondsInput value={seconds} theme={theme} onCommit={(value) => onConfigChange("videoSeconds", String(value))} />
+                    <div className="flex items-center gap-3 opacity-100 transition-opacity" style={{ opacity: automaticDuration ? 0.45 : 1 }} onMouseDown={(event) => event.stopPropagation()}>
+                        <Slider className="min-w-0 flex-1" disabled={automaticDuration} min={VIDEO_SECONDS_MIN} max={VIDEO_SECONDS_MAX} step={1} value={seconds} onChange={(value) => onConfigChange("videoSeconds", String(Array.isArray(value) ? value[0] : value))} />
+                        <SecondsInput value={seconds} disabled={automaticDuration} theme={theme} onCommit={(value) => onConfigChange("videoSeconds", String(value))} />
                         <span className="shrink-0 text-sm" style={{ color: theme.node.muted }}>s</span>
                     </div>
+                    {automaticDuration ? <div className="text-xs" style={{ color: theme.node.muted }}>{t("settingsPanels.video.autoDurationHint")}</div> : null}
                 </SettingGroup>
                 <SettingGroup title={t("settingsPanels.video.mode")} color={theme.node.muted}>
                     <div className="grid grid-cols-2 gap-2.5">
@@ -114,7 +133,8 @@ export function videoSizeLabel(value: string) {
     return ratio === "auto" ? i18n.t("settingsPanels.video.adaptive") : ratio;
 }
 
-export function videoSecondsLabel(value: string) {
+export function videoSecondsLabel(value: string, mode?: VideoDurationMode) {
+    if (mode === "auto") return i18n.t("settingsPanels.video.durationModes.auto");
     if (String(value).trim() === "-1") return i18n.t("settingsPanels.video.smart");
     return `${value || "6"}s`;
 }
@@ -125,6 +145,10 @@ export function videoModeLabel(value: string) {
 
 export function normalizeVideoModeValue(value: string | undefined) {
     return value === "reference" ? "reference" : "frames";
+}
+
+export function normalizeVideoDurationModeValue(value: string | undefined): VideoDurationMode {
+    return value === "auto" ? "auto" : "fixed";
 }
 
 export function normalizeVideoSizeValue(value: string, resolution = "720") {
@@ -173,7 +197,7 @@ function ResolutionInput({ value, theme, onChange }: { value: string; theme: Can
     );
 }
 
-function SecondsInput({ value, theme, onCommit }: { value: number; theme: CanvasTheme; onCommit: (value: number) => void }) {
+function SecondsInput({ value, disabled, theme, onCommit }: { value: number; disabled: boolean; theme: CanvasTheme; onCommit: (value: number) => void }) {
     const commit = (input: HTMLInputElement) => {
         const next = Number(clampVideoSeconds(input.value));
         input.value = String(next);
@@ -186,6 +210,7 @@ function SecondsInput({ value, theme, onCommit }: { value: number; theme: Canvas
                 type="number"
                 min={VIDEO_SECONDS_MIN}
                 max={VIDEO_SECONDS_MAX}
+                disabled={disabled}
                 className="min-w-0 flex-1 bg-transparent px-2 text-center outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
                 defaultValue={value}
                 key={value}

@@ -232,6 +232,7 @@ function getVideoConfig() {
             modelName: modelOptionName(model),
             size: config.size || "1280x720",
             seconds: config.videoSeconds || "6",
+            durationMode: config.videoDurationMode === "auto" ? "auto" : "fixed",
             resolution: config.vquality || "720",
             generateAudio: config.videoGenerateAudio !== "false",
             watermark: config.videoWatermark === "true",
@@ -263,7 +264,13 @@ function runVideoWorkbench(input: SiteToolInput, navigate: NavigateFunction) {
     if (input.seconds != null && String(input.seconds).trim()) {
         const seconds = clampVideoSeconds(String(input.seconds));
         configStore.updateConfig("videoSeconds", seconds);
+        configStore.updateConfig("videoDurationMode", "fixed");
         applied.seconds = seconds;
+        applied.durationMode = "fixed";
+    }
+    if (input.durationMode === "auto" || input.durationMode === "fixed") {
+        configStore.updateConfig("videoDurationMode", input.durationMode);
+        applied.durationMode = input.durationMode;
     }
     if (typeof input.resolution === "string" && input.resolution.trim()) {
         configStore.updateConfig("vquality", input.resolution);
