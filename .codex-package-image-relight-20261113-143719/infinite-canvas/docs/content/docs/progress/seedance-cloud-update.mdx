@@ -1,0 +1,175 @@
+---
+title: Seedance cloud update
+description: Cloud deployment notes for Seedance reference media, public file URLs, and video editing
+---
+
+# Seedance cloud update
+
+This page documents the cloud update process and request rules for Seedance through New API and Volcengine Ark.
+
+## Changes
+
+- Seedance models are classified as video models.
+- First-frame and first-last-frame inputs use `first_frame` and `last_frame` roles without `ratio`.
+- Omnipotent-reference inputs use `reference_image`, `reference_video`, and `reference_audio` roles.
+- Reference video and audio are sent as signed public URLs instead of Data URLs.
+- When a reference video is present, video editing submits `ratio: "adaptive"` and `duration: -1`.
+- Reference videos must be between 4 and 30 seconds long.
+
+## Prerequisites
+
+Publish Canvas through a public address that Ark can reach:
+
+```text
+Public tunnel address -> 192.168.1.68:3000
+```
+
+Verify the public endpoints:
+
+```bash
+curl -I https://your-public-domain.example.com/
+curl https://your-public-domain.example.com/api/health
+```
+
+The health endpoint should return:
+
+```json
+{"ok":true}
+```
+
+## Environment
+
+Configure `/opt/infinite-canvas-deploy/.env`:
+
+```bash
+CANVAS_PUBLIC_BASE_URL=https://your-public-domain.example.com
+CANVAS_PUBLIC_FILE_TTL_SECONDS=86400
+```
+
+The base URL must be publicly reachable by Ark and must not contain a trailing slash.
+
+For HTTPS:
+
+```bash
+COOKIE_SECURE=true
+```
+
+For an HTTP-only tunnel:
+
+```bash
+COOKIE_SECURE=false
+```
+
+If a tunnel uses a dynamic port, update `CANVAS_PUBLIC_BASE_URL` and restart the API whenever the port changes.
+
+## Build and deploy
+
+From the extracted source root:
+
+```bash
+sudo docker build \
+  --no-cache \
+  -t ghcr.io/douxiyang-prog/infinite-canvas:latest \
+  -f Dockerfile .
+
+sudo docker build \
+  --no-cache \
+  -t ghcr.io/douxiyang-prog/infinite-canvas-api:latest \
+  -f server/Dockerfile ./server
+```
+
+Recreate both services:
+
+```bash
+cd /opt/infinite-canvas-deploy
+sudo docker compose \
+  -f docker-compose.external-mysql.yml \
+  up -d --force-recreate api app
+```
+
+### Automated upgrade script
+
+The deployment bundle includes `deploy/update-canvas-from-tar.sh`. Install it in the deployment directory and pass a full build-source archive:
+
+```bash
+cd /opt/infinite-canvas-deploy
+sudo bash update-canvas-from-tar.sh /tmp/new-canvas-build-src.tar.gz
+```
+
+The script backs up the current images, rebuilds both services, verifies the new image contents, recreates the containers, checks health, and rolls back automatically after a post-start failure. See `deploy/UPDATE_FROM_TAR.md` for details.
+
+## Verification
+
+```bash
+sudo docker compose -f docker-compose.external-mysql.yml ps
+curl http://127.0.0.1:3000/api/health
+curl https://your-public-domain.example.com/api/health
+```
+
+After a forced browser refresh, verify:
+
+| Scenario | Expected request |
+| --- | --- |
+| Text to video | Selected ratio and duration |
+| One first-frame image | No `ratio`; output follows the image |
+| First and last frames | No `ratio`; output follows the first frame |
+| Multiple reference images | `reference_image`; selected ratio |
+| Video editing / video reference | `ratio=adaptive`, `duration=-1`; output follows the input video |
+
+Reference media is fetched by Ark through a signed public URL. Signatures have a server-configured lifetime and do not expose the user's login cookie.
+
+## Troubleshooting
+
+### `reference media mode requires video role to be reference_video`
+
+The browser is still serving an older frontend bundle. Rebuild the frontend and confirm the deployed JavaScript contains `reference_video`.
+
+### `reference_video must be provided as a web url`
+
+The API lacks a public base URL, the tunnel is unreachable, or the API image is still an older build.
+
+### `ratio must be adaptive` or `duration must be -1`
+
+Ark identified a video editing task, but the client sent normal video-generation parameters. Deploy the video-editing request fix.
+
+### Invalid reference video duration
+
+Use an input video between 4 and 30 seconds long.
+
+## Rollback
+
+Back up the current images before deployment:
+
+```bash
+sudo docker tag \
+  ghcr.io/douxiyang-prog/infinite-canvas:latest \
+  ghcr.io/douxiyang-prog/infinite-canvas:backup-before-update
+
+sudo docker tag \
+  ghcr.io/douxiyang-prog/infinite-canvas-api:latest \
+  ghcr.io/douxiyang-prog/infinite-canvas-api:backup-before-update
+```
+
+Restore the backups and recreate the services:
+
+```bash
+sudo docker tag \
+  ghcr.io/douxiyang-prog/infinite-canvas:backup-before-update \
+  ghcr.io/douxiyang-prog/infinite-canvas:latest
+
+sudo docker tag \
+  ghcr.io/douxiyang-prog/infinite-canvas-api:backup-before-update \
+  ghcr.io/douxiyang-prog/infinite-canvas-api:latest
+
+cd /opt/infinite-canvas-deploy
+sudo docker compose \
+  -f docker-compose.external-mysql.yml \
+  up -d --force-recreate api app
+```
+
+## Security
+
+- Public file requests require a server-generated signature; unsigned requests still require login.
+- Do not log or retain signed URLs unnecessarily.
+- Prefer HTTPS for public media transport.
+- Use a strong administrator password when exposing Canvas through a public tunnel.

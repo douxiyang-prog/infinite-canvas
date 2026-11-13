@@ -44,6 +44,16 @@ export type CanvasNodeText = {
     content: string;
 };
 
+export type CanvasImageRelightParams = {
+    lightX: number;
+    lightY: number;
+    lightZ: number;
+    brightness: number;
+    temperature: number;
+    softness: number;
+    rimLight: boolean;
+};
+
 export type CanvasNodeMetadata = {
     content?: string;
     composerContent?: string;
@@ -72,6 +82,7 @@ export type CanvasNodeMetadata = {
     audioFormat?: string;
     audioSpeed?: string;
     audioInstructions?: string;
+    relight?: CanvasImageRelightParams;
     references?: string[];
     naturalWidth?: number;
     naturalHeight?: number;

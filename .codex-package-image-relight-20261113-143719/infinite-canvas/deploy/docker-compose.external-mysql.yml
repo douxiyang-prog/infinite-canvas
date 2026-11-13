@@ -1,0 +1,28 @@
+name: infinite-canvas
+
+services:
+  api:
+    image: ghcr.io/douxiyang-prog/infinite-canvas-api:latest
+    container_name: infinite-canvas-api
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      CANVAS_STORAGE_ALLOWED_ROOTS: ${CANVAS_STORAGE_ALLOWED_ROOTS:-/mnt/smb}
+    volumes:
+      - ${CANVAS_STORAGE_HOST_ROOT:-/mnt/smb}:${CANVAS_STORAGE_CONTAINER_ROOT:-/mnt/smb}:rw
+
+  app:
+    image: ghcr.io/douxiyang-prog/infinite-canvas:latest
+    container_name: infinite-canvas
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      COMPANY_NAME: ${COMPANY_NAME:-}
+      COMPANY_LOGO_URL: ${COMPANY_LOGO_URL:-/brand/logo.svg}
+    volumes:
+      - ./brand:/usr/share/nginx/html/brand:ro
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      - api

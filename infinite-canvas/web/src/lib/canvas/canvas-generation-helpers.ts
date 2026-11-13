@@ -7,7 +7,7 @@ import type { NodeGenerationInput } from "@/components/canvas/canvas-node-genera
 import type { CanvasNodeGenerationMode } from "@/components/canvas/canvas-node-prompt-panel";
 import type { CanvasImageAngleParams } from "@/components/canvas/canvas-node-angle-dialog";
 import type { ReferenceImage } from "@/types/image";
-import { CanvasNodeType, type CanvasAssistantSession, type CanvasConnection, type CanvasNodeData, type CanvasNodeMetadata } from "@/types/canvas";
+import { CanvasNodeType, type CanvasAssistantSession, type CanvasConnection, type CanvasImageRelightParams, type CanvasNodeData, type CanvasNodeMetadata } from "@/types/canvas";
 
 export function imageExtension(dataUrl: string) {
     return dataUrl.match(/^data:image[/]([^;]+)/)?.[1] || dataUrl.match(/image[/]([^;]+)/)?.[1] || "png";
@@ -190,4 +190,46 @@ export function buildAngleLabel(params: CanvasImageAngleParams) {
 
 export function buildAnglePrompt(params: CanvasImageAngleParams) {
     return i18n.t("canvas.generation.anglePrompt", { angle: buildAngleLabel(params) });
+}
+
+export function buildRelightLabel(params: CanvasImageRelightParams) {
+    const direction = relightDirectionKey(params);
+    return i18n.t("canvas.generation.relightLabel", {
+        direction: i18n.t(`canvas.editors.relightPosition_${direction}`),
+        brightness: params.brightness,
+        temperature: params.temperature,
+    });
+}
+
+export function buildRelightPrompt(params: CanvasImageRelightParams) {
+    const horizontal = params.lightX < -0.18 ? "left" : params.lightX > 0.18 ? "right" : "center";
+    const vertical = params.lightY < -0.18 ? "bottom" : params.lightY > 0.18 ? "top" : "middle";
+    const depth = params.lightZ < -0.2 ? "back" : params.lightZ > 0.2 ? "front" : "center";
+    const cues = [
+        params.lightY < -0.18 ? i18n.t("canvas.generation.relightCueBelow") : params.lightY > 0.18 ? i18n.t("canvas.generation.relightCueAbove") : "",
+        params.lightX < -0.18 ? i18n.t("canvas.generation.relightCueLeft") : params.lightX > 0.18 ? i18n.t("canvas.generation.relightCueRight") : "",
+        params.lightZ < -0.2 ? i18n.t("canvas.generation.relightCueBack") : params.lightZ > 0.2 ? i18n.t("canvas.generation.relightCueFront") : "",
+    ].filter(Boolean);
+    const lightingCue = cues.length ? cues.join(" ") : i18n.t("canvas.generation.relightCueLevel");
+    return i18n.t("canvas.generation.relightPrompt", {
+        lightPosition: i18n.t("canvas.generation.relightPositionNatural", {
+            horizontal: i18n.t(`canvas.generation.relightHorizontal_${horizontal}`),
+            vertical: i18n.t(`canvas.generation.relightVertical_${vertical}`),
+            depth: i18n.t(`canvas.generation.relightDepth_${depth}`),
+        }),
+        lightingCue,
+        brightness: params.brightness,
+        temperature: params.temperature,
+        shadow: i18n.t(params.softness < 34 ? "canvas.generation.relightShadowHard" : params.softness > 66 ? "canvas.generation.relightShadowSoft" : "canvas.generation.relightShadowBalanced"),
+        rim: i18n.t(params.rimLight ? "canvas.generation.relightRimOn" : "canvas.generation.relightRimOff"),
+    });
+}
+
+function relightDirectionKey(params: CanvasImageRelightParams) {
+    if (params.lightY > 0.56) return "top";
+    if (params.lightY < -0.56) return "bottom";
+    if (params.lightZ < -0.35) return "back";
+    if (params.lightX < -0.48) return "left";
+    if (params.lightX > 0.48) return "right";
+    return "front";
 }

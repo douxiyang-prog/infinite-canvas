@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="zh-CN" class="font-sans">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <meta name="description" content="一个无限画布创作工具" />
+        <link rel="icon" href="data:," />
+        <title>无限画布</title>
+        <script>
+            try {
+                var s = JSON.parse(localStorage.getItem("infinite-canvas:theme_store") || "{}");
+                var t = s.state && s.state.theme === "light" ? "light" : "dark";
+                document.documentElement.classList.toggle("dark", t === "dark");
+                document.documentElement.style.colorScheme = t;
+            } catch (e) {}
+        </script>
+        <style>
+            #boot-loading {
+                min-height: 100vh;
+                display: grid;
+                place-items: center;
+                color: #a3a3a3;
+                font: 14px/1.6 "Microsoft YaHei", sans-serif;
+            }
+        </style>
+    </head>
+    <body class="bg-background text-foreground antialiased">
+        <div id="root"><div id="boot-loading">正在加载无限画布…</div></div>
+        <script src="/config.js"></script>
+        <script type="module" src="/src/main.tsx"></script>
+    </body>
+</html>
