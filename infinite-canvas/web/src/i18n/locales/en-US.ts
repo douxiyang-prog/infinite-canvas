@@ -28,6 +28,7 @@ export default {
         durationSeconds: "{{seconds}}s",
         imageReadFailed: "Failed to read image",
     },
+    voiceInput: { label: "Voice input", stop: "Stop voice input", close: "Close voice input status", requesting: "Requesting microphone permission…", listening: "Listening for {{seconds}}s", processing: "Transcribing…", transcriptHint: "Start speaking…", unsupported: "Voice input is not supported in this browser. Use Chrome or Edge.", permissionDenied: "Microphone permission was denied. Allow it in the browser settings and try again.", serviceUnavailable: "Browser speech recognition is unavailable. Check the network or use another browser.", microphoneUnavailable: "No available microphone was found", noSpeech: "No speech was detected. Try again.", networkError: "Speech recognition network error. Check the network and try again.", languageUnsupported: "The current language is not supported by speech recognition", failed: "Speech recognition failed. Try again." },
     settingsPanels: {
         common: { auto: "Auto", low: "Low", medium: "Medium", high: "High", xhigh: "Extra high", max: "Maximum" },
         image: { title: "Image settings", quality: "Quality", size: "Size", align16: "Align to multiples of 16", align16Hint: "Round dimensions up to the next multiple of 16 after input", resolution: "Resolution", aspectRatio: "Aspect ratio", transparent: "Transparent background", transparentHint: "Generate an image without a background when supported by the model", count: "Image count", images: "{{count}} images" },

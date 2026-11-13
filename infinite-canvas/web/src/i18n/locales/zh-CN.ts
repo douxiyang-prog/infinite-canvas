@@ -28,6 +28,7 @@ export default {
         durationSeconds: "{{seconds}}秒",
         imageReadFailed: "读取图片失败",
     },
+    voiceInput: { label: "语音输入", stop: "结束语音输入", close: "关闭语音输入状态", requesting: "正在请求麦克风权限…", listening: "正在聆听 {{seconds}} 秒", processing: "正在识别…", transcriptHint: "请开始说话…", unsupported: "当前浏览器不支持语音输入，请使用 Chrome 或 Edge", permissionDenied: "未获得麦克风权限，请在浏览器设置中允许后重试", serviceUnavailable: "浏览器语音识别服务不可用，请检查网络或改用其他浏览器", microphoneUnavailable: "未检测到可用的麦克风", noSpeech: "没有识别到语音，请重试", networkError: "语音识别网络异常，请检查网络后重试", languageUnsupported: "当前语言不受语音识别服务支持", failed: "语音识别失败，请重试" },
     settingsPanels: {
         common: { auto: "自动", low: "低", medium: "中", high: "高", xhigh: "极高", max: "最高" },
         image: { title: "图像设置", quality: "质量", size: "尺寸", align16: "16 倍数对齐", align16Hint: "输入完成后自动向上补成 16 的倍数", resolution: "分辨率", aspectRatio: "宽高比", transparent: "透明背景", transparentHint: "开启后生成无背景的透明图像（仅部分模型可用）", count: "生成张数", images: "{{count}} 张" },

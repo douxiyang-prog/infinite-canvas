@@ -6,7 +6,9 @@ import { useTranslation } from "react-i18next";
 
 import i18n from "@/i18n";
 import { canvasThemes } from "@/lib/canvas-theme";
+import { captureContentEditableRange, insertTextIntoContentEditable } from "@/lib/voice-input-insertion";
 import { useThemeStore } from "@/stores/use-theme-store";
+import { VoiceInputButton } from "@/components/ui/voice-input-button";
 import type { NodeGenerationInput } from "./canvas-node-generation";
 import { CanvasNodeReferenceBar } from "./canvas-node-reference-bar";
 import type { CanvasNodeData } from "@/types/canvas";
@@ -38,6 +40,7 @@ export function CanvasConfigComposer({ nodeId, nodes, value, inputs, connectedNo
     const theme = canvasThemes[useThemeStore((state) => state.theme)];
     const editorRef = useRef<HTMLDivElement>(null);
     const composingRef = useRef(false);
+    const savedRangeRef = useRef<Range | null>(null);
     const [mention, setMention] = useState<MentionState | null>(null);
     const [activeIndex, setActiveIndex] = useState(0);
     const [imagePreview, setImagePreview] = useState<string | null>(null);
@@ -63,6 +66,7 @@ export function CanvasConfigComposer({ nodeId, nodes, value, inputs, connectedNo
             const input = referenceById.get(token.nodeId);
             if (input) editor.append(createReferenceChip(input, inputs, theme, setImagePreview));
         });
+        savedRangeRef.current = null;
     }, [inputs, referenceById, theme, tokens]);
 
     const syncFromEditor = () => {
@@ -71,6 +75,20 @@ export function CanvasConfigComposer({ nodeId, nodes, value, inputs, connectedNo
         const next = serializeEditor(editor);
         onChange(next);
         syncMention();
+    };
+
+    const insertVoiceText = (text: string) => {
+        const editor = editorRef.current;
+        if (!editor || !insertTextIntoContentEditable(editor, text, savedRangeRef.current)) return;
+        savedRangeRef.current = captureContentEditableRange(editor);
+        closeMention();
+        onChange(serializeEditor(editor));
+    };
+
+    const rememberSelection = () => {
+        const editor = editorRef.current;
+        if (!editor) return;
+        savedRangeRef.current = captureContentEditableRange(editor);
     };
 
     const syncMention = () => {
@@ -128,7 +146,10 @@ export function CanvasConfigComposer({ nodeId, nodes, value, inputs, connectedNo
                     <div className="shrink-0 text-xs font-semibold">{t("canvas.composer.title")}</div>
                     <div className="truncate text-[11px] opacity-55">{t("canvas.composer.description")}</div>
                 </div>
-                <Button size="small" type="text" className="!h-7 !w-7 !min-w-7 !p-0" icon={<X className="size-3.5" />} onClick={onClose} />
+                <div className="flex shrink-0 items-center gap-1">
+                    <VoiceInputButton onText={insertVoiceText} placement="bottom" className="!h-7 !w-7 !min-w-7" style={{ color: theme.node.text }} panelStyle={{ background: theme.toolbar.panel, borderColor: theme.toolbar.border, color: theme.node.text }} />
+                    <Button size="small" type="text" className="!h-7 !w-7 !min-w-7 !p-0" icon={<X className="size-3.5" />} onClick={onClose} />
+                </div>
             </div>
             <CanvasNodeReferenceBar nodeId={nodeId} nodes={nodes} connectedNodes={connectedNodes} onDisconnect={onDisconnectReference} onStartSelection={onStartReferenceSelection} />
             <div className="relative rounded-xl">
@@ -140,7 +161,10 @@ export function CanvasConfigComposer({ nodeId, nodes, value, inputs, connectedNo
                     className="thin-scrollbar min-h-28 max-h-72 w-full overflow-y-auto overscroll-contain whitespace-pre-wrap break-words px-3 py-2 text-sm leading-7 outline-none"
                     style={{ color: theme.node.text }}
                     onInput={() => {
-                        if (!composingRef.current) syncFromEditor();
+                        if (!composingRef.current) {
+                            syncFromEditor();
+                            rememberSelection();
+                        }
                     }}
                     onCompositionStart={() => {
                         composingRef.current = true;
@@ -148,7 +172,11 @@ export function CanvasConfigComposer({ nodeId, nodes, value, inputs, connectedNo
                     onCompositionEnd={() => {
                         composingRef.current = false;
                         syncFromEditor();
+                        rememberSelection();
                     }}
+                    onFocus={rememberSelection}
+                    onMouseUp={rememberSelection}
+                    onKeyUp={rememberSelection}
                     onKeyDown={(event: KeyboardEvent<HTMLDivElement>) => {
                         event.stopPropagation();
                         if (mention && candidates.length) {

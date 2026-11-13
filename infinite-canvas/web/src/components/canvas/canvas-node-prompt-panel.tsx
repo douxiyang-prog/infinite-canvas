@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ArrowUp, LoaderCircle, Maximize2, Square } from "lucide-react";
 import { Button, Modal, Tooltip } from "antd";
 import { useTranslation } from "react-i18next";
@@ -11,13 +11,14 @@ import { useThemeStore } from "@/stores/use-theme-store";
 import { CanvasImageSettingsPopover } from "./canvas-image-settings-popover";
 import { CanvasPromptLibrary } from "./canvas-prompt-library";
 import { CanvasAudioSettingsPopover, type CanvasAudioSettingKey } from "./canvas-audio-settings-popover";
-import { CanvasPromptChipInput } from "./canvas-prompt-chip-input";
+import { CanvasPromptChipInput, type CanvasPromptChipInputHandle } from "./canvas-prompt-chip-input";
 import { CanvasVideoSettingsPopover } from "./canvas-video-settings-popover";
 import { CanvasTextSettingsPopover } from "./canvas-text-settings-popover";
 import { CanvasNodeType, type CanvasGenerationMode, type CanvasNodeData, type CanvasNodeMetadata } from "@/types/canvas";
 import type { CanvasResourceReference } from "@/lib/canvas/canvas-resource-references";
 import { CanvasNodeReferenceBar } from "./canvas-node-reference-bar";
 import { NewApiGenerationCost } from "./new-api-generation-cost";
+import { VoiceInputButton } from "@/components/ui/voice-input-button";
 
 export type CanvasNodeGenerationMode = CanvasGenerationMode;
 
@@ -49,6 +50,8 @@ export function CanvasNodePromptPanel({ node, nodes, isRunning, onPromptChange, 
     const isEditingExistingContent = hasTextContent || hasImageContent;
     const [prompt, setPrompt] = useState(node.metadata?.composerContent ?? node.metadata?.prompt ?? "");
     const [expanded, setExpanded] = useState(false);
+    const promptInputRef = useRef<CanvasPromptChipInputHandle>(null);
+    const expandedPromptInputRef = useRef<CanvasPromptChipInputHandle>(null);
 
     // Restore prompts only when switching nodes; preserve the current input after generation on the same node.
     useEffect(() => {
@@ -83,6 +86,7 @@ export function CanvasNodePromptPanel({ node, nodes, isRunning, onPromptChange, 
         >
             <CanvasNodeReferenceBar nodeId={node.id} nodes={nodes} connectedNodes={connectedNodes} onDisconnect={onDisconnectReference} onStartSelection={onStartReferenceSelection} />
             <CanvasPromptChipInput
+                ref={promptInputRef}
                 value={prompt}
                 references={mentionReferences}
                 onChange={updatePrompt}
@@ -92,8 +96,8 @@ export function CanvasNodePromptPanel({ node, nodes, isRunning, onPromptChange, 
                 placeholder={t(`canvas.promptPanel.${mode === "image" && hasImageContent ? "editImage" : mode === "text" && hasTextContent ? "editText" : mode}`)}
             />
 
-            <div className="mt-2 flex min-w-0 items-center justify-between gap-2">
-                <div className="flex min-w-0 items-center gap-2">
+            <div className="mt-2 flex min-w-0 flex-wrap items-center justify-between gap-2">
+                <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
                     <Tooltip title={t("canvas.promptPanel.expandEditor")}>
                         <Button type="text" className="!h-8 !w-8 !min-w-8 shrink-0 !rounded-full !bg-transparent !p-0" style={{ color: theme.node.text }} icon={<Maximize2 className="size-3.5" />} onClick={openExpandedEditor} aria-label={t("canvas.promptPanel.expandEditor")} />
                     </Tooltip>
@@ -127,7 +131,15 @@ export function CanvasNodePromptPanel({ node, nodes, isRunning, onPromptChange, 
                         </>
                     )}
                 </div>
-                <div className="flex shrink-0 items-center gap-1">
+                <div className="ml-auto flex shrink-0 items-center gap-1">
+                    <VoiceInputButton
+                        key={`${node.id}-inline`}
+                        onText={(text) => promptInputRef.current?.insertText(text)}
+                        placement="top"
+                        className="!h-10 !w-10 !min-w-10"
+                        style={{ color: theme.node.text }}
+                        panelStyle={{ background: theme.toolbar.panel, borderColor: theme.toolbar.border, color: theme.node.text }}
+                    />
                     <Button
                         type="primary"
                         className="!h-10 !min-w-16 shrink-0 !rounded-full !px-3"
@@ -157,6 +169,7 @@ export function CanvasNodePromptPanel({ node, nodes, isRunning, onPromptChange, 
                 <div data-canvas-no-zoom className="pt-2" onWheelCapture={(event) => event.stopPropagation()}>
                     <CanvasNodeReferenceBar nodeId={node.id} nodes={nodes} connectedNodes={connectedNodes} onDisconnect={onDisconnectReference} onStartSelection={(nodeId) => { setExpanded(false); onStartReferenceSelection?.(nodeId); }} />
                     <CanvasPromptChipInput
+                        ref={expandedPromptInputRef}
                         value={prompt}
                         references={mentionReferences}
                         onChange={updatePrompt}
@@ -164,6 +177,16 @@ export function CanvasNodePromptPanel({ node, nodes, isRunning, onPromptChange, 
                         style={{ background: "transparent", borderColor: theme.toolbar.border, color: theme.node.text }}
                         placeholder={t(`canvas.promptPanel.${mode === "image" && hasImageContent ? "editImage" : mode === "text" && hasTextContent ? "editText" : mode}`)}
                     />
+                    <div className="mt-2 flex justify-end">
+                        <VoiceInputButton
+                            key={`${node.id}-expanded`}
+                            showLabel
+                            onText={(text) => expandedPromptInputRef.current?.insertText(text)}
+                            placement="top"
+                            style={{ color: theme.node.text }}
+                            panelStyle={{ background: theme.toolbar.panel, borderColor: theme.toolbar.border, color: theme.node.text }}
+                        />
+                    </div>
                 </div>
             </Modal>
         </div>

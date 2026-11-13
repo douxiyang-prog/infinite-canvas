@@ -1,6 +1,6 @@
 import { ArrowLeft, ArrowRight, BookOpen, CheckSquare, ClipboardPaste, Download, FolderPlus, History, LoaderCircle, Plus, SlidersHorizontal, Sparkles, Trash2, Upload, VideoIcon } from "lucide-react";
 import { useEffect, useRef, useState, useSyncExternalStore, type DragEvent } from "react";
-import { App, Button, Checkbox, Drawer, Empty, Input, Modal, Tag, Typography } from "antd";
+import { App, Button, Checkbox, Drawer, Empty, Modal, Tag, Typography } from "antd";
 import localforage from "localforage";
 import { nanoid } from "nanoid";
 import { saveAs } from "file-saver";
@@ -10,6 +10,8 @@ import { AssetPickerModal, type InsertAssetPayload } from "@/components/canvas/a
 import { NewApiGenerationCost } from "@/components/canvas/new-api-generation-cost";
 import { ModelPicker } from "@/components/model-picker";
 import { PromptSelectDialog } from "@/components/prompts/prompt-select-dialog";
+import { VoiceInputButton } from "@/components/ui/voice-input-button";
+import { VoicePromptTextArea, type VoicePromptTextAreaHandle } from "@/components/ui/voice-prompt-textarea";
 import { VideoGenerationProgress } from "@/components/video-generation-progress";
 import { VideoSettingsPanel, normalizeVideoResolutionValue, normalizeVideoSizeValue, videoModeLabel, videoSecondsLabel, videoSizeLabel } from "@/components/video-settings-panel";
 import { canvasThemes } from "@/lib/canvas-theme";
@@ -103,6 +105,7 @@ export default function VideoPage() {
     const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
     const [referenceDragTarget, setReferenceDragTarget] = useState(false);
     const [autoRunToken, setAutoRunToken] = useState(0);
+    const promptInputRef = useRef<VoicePromptTextAreaHandle>(null);
     const videoCommand = useWorkbenchAgentStore((state) => state.videoCommand);
     const clearVideoCommand = useWorkbenchAgentStore((state) => state.clearVideoCommand);
     const updateAgentTask = useWorkbenchAgentStore((state) => state.updateTask);
@@ -413,7 +416,8 @@ export default function VideoPage() {
                             <div>
                                 <div className="mb-2 flex items-center justify-between gap-3">
                                     <span className="text-base font-semibold">{t("workbench.prompt")}</span>
-                                    <div className="flex gap-2">
+                                    <div className="flex flex-wrap items-center justify-end gap-2">
+                                        <VoiceInputButton onText={(text) => promptInputRef.current?.insertText(text)} placement="bottom" className="!h-7 !w-7 !min-w-7" />
                                         <Button size="small" icon={<BookOpen className="size-3.5" />} onClick={() => setPromptDialogOpen(true)}>
                                             {t("workbench.viewPrompts")}
                                         </Button>
@@ -422,7 +426,7 @@ export default function VideoPage() {
                                         </Button>
                                     </div>
                                 </div>
-                                <Input.TextArea value={prompt} onChange={(event) => setPrompt(event.target.value)} rows={7} placeholder={t("videoWorkbench.promptPlaceholder")} />
+                                <VoicePromptTextArea ref={promptInputRef} value={prompt} onChange={setPrompt} rows={7} placeholder={t("videoWorkbench.promptPlaceholder")} />
                             </div>
 
                             <div className="min-w-0">

@@ -1,6 +1,6 @@
 import { ArrowLeft, ArrowRight, BookOpen, CheckSquare, ClipboardPaste, Download, FolderPlus, History, ImagePlus, LoaderCircle, PenLine, Plus, SlidersHorizontal, Sparkles, Trash2, Upload } from "lucide-react";
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
-import { App, Button, Checkbox, Drawer, Empty, Image, Input, Modal, Tag, Tooltip, Typography } from "antd";
+import { App, Button, Checkbox, Drawer, Empty, Image, Modal, Tag, Tooltip, Typography } from "antd";
 import localforage from "localforage";
 import { saveAs } from "file-saver";
 import { useTranslation } from "react-i18next";
@@ -9,6 +9,8 @@ import { ImageSettingsPanel } from "@/components/image-settings-panel";
 import { ModelPicker } from "@/components/model-picker";
 import { PromptSelectDialog } from "@/components/prompts/prompt-select-dialog";
 import { AssetPickerModal, type InsertAssetPayload } from "@/components/canvas/asset-picker-modal";
+import { VoiceInputButton } from "@/components/ui/voice-input-button";
+import { VoicePromptTextArea, type VoicePromptTextAreaHandle } from "@/components/ui/voice-prompt-textarea";
 import { canvasThemes } from "@/lib/canvas-theme";
 import { imageReferenceLabel } from "@/lib/image-reference-prompt";
 import { modelOptionLabel, useConfigStore, useEffectiveConfig, type AiConfig } from "@/stores/use-config-store";
@@ -95,6 +97,7 @@ export default function ImagePage() {
     const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
     const [isReferenceDragActive, setIsReferenceDragActive] = useState(false);
     const [autoRunToken, setAutoRunToken] = useState(0);
+    const promptInputRef = useRef<VoicePromptTextAreaHandle>(null);
     const imageCommand = useWorkbenchAgentStore((state) => state.imageCommand);
     const clearImageCommand = useWorkbenchAgentStore((state) => state.clearImageCommand);
     const updateAgentTask = useWorkbenchAgentStore((state) => state.updateTask);
@@ -402,7 +405,8 @@ export default function ImagePage() {
                             <div>
                                 <div className="mb-2 flex items-center justify-between gap-3">
                                     <span className="text-base font-semibold">{t("workbench.prompt")}</span>
-                                    <div className="flex gap-2">
+                                    <div className="flex flex-wrap items-center justify-end gap-2">
+                                        <VoiceInputButton onText={(text) => promptInputRef.current?.insertText(text)} placement="bottom" className="!h-7 !w-7 !min-w-7" />
                                         <Button size="small" icon={<BookOpen className="size-3.5" />} onClick={() => setPromptDialogOpen(true)}>
                                             {t("workbench.viewPrompts")}
                                         </Button>
@@ -411,7 +415,7 @@ export default function ImagePage() {
                                         </Button>
                                     </div>
                                 </div>
-                                <Input.TextArea value={prompt} onChange={(event) => setPrompt(event.target.value)} rows={7} placeholder={t("imageWorkbench.promptPlaceholder")} />
+                                <VoicePromptTextArea ref={promptInputRef} value={prompt} onChange={setPrompt} rows={7} placeholder={t("imageWorkbench.promptPlaceholder")} />
                             </div>
 
                             <div className="min-w-0">

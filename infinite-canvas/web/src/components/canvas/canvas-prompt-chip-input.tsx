@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
 import type { CSSProperties, KeyboardEvent, MouseEvent, PointerEvent } from "react";
 import { createPortal } from "react-dom";
 import { Image } from "antd";
@@ -7,6 +7,7 @@ import { FileText, Image as ImageIcon, Music2, Video } from "lucide-react";
 import i18n from "@/i18n";
 import { canvasThemes } from "@/lib/canvas-theme";
 import { isImeComposing, isPlainEnterKey } from "@/lib/keyboard-event";
+import { captureContentEditableRange, insertTextIntoContentEditable } from "@/lib/voice-input-insertion";
 import { useThemeStore } from "@/stores/use-theme-store";
 import type { CanvasResourceReference } from "@/lib/canvas/canvas-resource-references";
 
@@ -29,12 +30,17 @@ type Token =
     | { type: "text"; value: string }
     | { type: "reference"; label: string };
 
+export type CanvasPromptChipInputHandle = {
+    insertText: (text: string) => void;
+};
+
 // Prompt-panel contentEditable input: @ references embed thumbnail chips instead of plain label text.
 // Serialization converts chips back to reference labels so the generated value matches the former textarea semantics.
-export function CanvasPromptChipInput({ value, references, onChange, onSubmit, className, style, placeholder }: Props) {
+export const CanvasPromptChipInput = forwardRef<CanvasPromptChipInputHandle, Props>(function CanvasPromptChipInput({ value, references, onChange, onSubmit, className, style, placeholder }, ref) {
     const theme = canvasThemes[useThemeStore((state) => state.theme)];
     const editorRef = useRef<HTMLDivElement>(null);
     const composingRef = useRef(false);
+    const savedRangeRef = useRef<Range | null>(null);
     // Track the last value emitted to the parent. An identical focused value is this component's own echo,
     // so skip rebuilding to preserve the caret and IME. Rebuild external changes even while focused.
     const lastEmittedRef = useRef(value);
@@ -70,12 +76,29 @@ export function CanvasPromptChipInput({ value, references, onChange, onSubmit, c
             if (reference) editor.append(createReferenceChip(reference, theme, setImagePreview));
             else editor.append(document.createTextNode(token.label));
         });
+        savedRangeRef.current = null;
         lastEmittedRef.current = value;
     }, [tokens, referenceByLabel, theme, value]);
 
     const emit = (next: string) => {
         lastEmittedRef.current = next;
         onChange(next);
+    };
+
+    useImperativeHandle(ref, () => ({
+        insertText(text) {
+            const editor = editorRef.current;
+            if (!editor || !insertTextIntoContentEditable(editor, text, savedRangeRef.current)) return;
+            savedRangeRef.current = captureContentEditableRange(editor);
+            closeMention();
+            emit(serializeEditor(editor));
+        },
+    }));
+
+    const rememberSelection = () => {
+        const editor = editorRef.current;
+        if (!editor) return;
+        savedRangeRef.current = captureContentEditableRange(editor);
     };
 
     const syncFromEditor = () => {
@@ -142,7 +165,10 @@ export function CanvasPromptChipInput({ value, references, onChange, onSubmit, c
                 className={`${className || ""} overflow-y-auto whitespace-pre-wrap break-words outline-none`}
                 style={{ ...style, cursor: "text" }}
                 onInput={() => {
-                    if (!composingRef.current) syncFromEditor();
+                    if (!composingRef.current) {
+                        syncFromEditor();
+                        rememberSelection();
+                    }
                 }}
                 onCompositionStart={() => {
                     composingRef.current = true;
@@ -150,7 +176,11 @@ export function CanvasPromptChipInput({ value, references, onChange, onSubmit, c
                 onCompositionEnd={() => {
                     composingRef.current = false;
                     syncFromEditor();
+                    rememberSelection();
                 }}
+                onFocus={rememberSelection}
+                onMouseUp={rememberSelection}
+                onKeyUp={rememberSelection}
                 onKeyDown={(event: KeyboardEvent<HTMLDivElement>) => {
                     event.stopPropagation();
                     if (isImeComposing(event)) return;
@@ -196,7 +226,7 @@ export function CanvasPromptChipInput({ value, references, onChange, onSubmit, c
             {imagePreview ? <Image src={imagePreview} alt={i18n.t("canvas.composer.imagePreview")} style={{ display: "none" }} preview={{ visible: true, src: imagePreview, onVisibleChange: (visible) => !visible && setImagePreview(null) }} /> : null}
         </div>
     );
-}
+});
 
 function MentionMenu({ rect, references, activeIndex, theme, onSelect }: { rect: DOMRect | null; references: CanvasResourceReference[]; activeIndex: number; theme: (typeof canvasThemes)[keyof typeof canvasThemes]; onSelect: (reference: CanvasResourceReference) => void }) {
     const selectedRef = useRef(false);
