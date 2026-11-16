@@ -8,6 +8,8 @@ import AdminSettingsPage from "@/pages/admin/settings";
 import AssetsPage from "@/pages/assets";
 import CanvasPage from "@/pages/canvas";
 import CanvasProjectPage from "@/pages/canvas/project";
+import CgtwPage from "@/pages/cgtw";
+import CgtwCanvasPage from "@/pages/cgtw/canvas";
 import HomePage from "@/pages/home";
 import ImagePage from "@/pages/image";
 import LoginPage from "@/pages/login";
@@ -40,6 +42,8 @@ export const router = createBrowserRouter([
                     { path: "/assets", element: <AssetsPage /> },
                     { path: "/prompts", element: <PromptsPage /> },
                     { path: "/canvas", element: <CanvasPage /> },
+                    { path: "/cgtw", element: <CgtwPage /> },
+                    { path: "/cgtw/:id", element: <CgtwCanvasPage /> },
                     { path: "/projects", element: <ProjectsPage /> },
                     { path: "/projects/:projectId", element: <ProjectDetailPage /> },
                     { path: "/projects/:projectId/assets", element: <ProjectAssetsPage /> },

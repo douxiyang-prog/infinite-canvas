@@ -57,7 +57,7 @@ export function AppSidebar() {
     const currentCanvasScope = useCanvasStore((state) => (canvasId ? state.projects.find((project) => project.id === canvasId)?.scope : undefined));
     const isProjectCanvas = Boolean(pathname.match(/^\/canvas\/[^/]+/)) && (new URLSearchParams(search).has("teamProjectId") || currentCanvasScope === "project");
     const activeToolSlug = isProjectCanvas ? "projects" : navigationTools.some((tool) => tool.slug === slug) ? (slug as NavigationToolSlug) : undefined;
-    const canvasProject = /^\/canvas\/[^/]+/.test(pathname);
+    const canvasProject = /^\/(canvas|cgtw)\/[^/]+/.test(pathname);
     const [collapsed, setCollapsed] = useState(() => {
         const stored = localStorage.getItem(SIDEBAR_STORAGE_KEY);
         return stored === null ? window.matchMedia("(max-width: 1279px)").matches : stored === "true";

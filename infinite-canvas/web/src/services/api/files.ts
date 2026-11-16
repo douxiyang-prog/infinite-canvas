@@ -11,7 +11,7 @@ export type StoredServerFile = {
 };
 
 function currentCanvasProjectId() {
-    const match = window.location.pathname.match(/^\/canvas\/([A-Za-z0-9_-]+)/);
+    const match = window.location.pathname.match(/^\/(?:canvas|cgtw)\/([A-Za-z0-9_-]+)/);
     return match?.[1] || "";
 }
 

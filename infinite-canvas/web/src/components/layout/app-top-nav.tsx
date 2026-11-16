@@ -21,7 +21,7 @@ export function AppTopNav() {
     const connectAgent = useAgentStore((state) => state.connectAgent);
     const togglePanel = useAgentStore((state) => state.togglePanel);
     const panelOpen = useAgentStore((state) => state.panelOpen);
-    const hideHeader = /^\/canvas\/[^/]+/.test(pathname);
+    const hideHeader = /^\/(canvas|cgtw)\/[^/]+/.test(pathname);
     const slug = pathname.split("/").filter(Boolean)[0];
     const isProjectCanvas = Boolean(pathname.match(/^\/canvas\/[^/]+/)) && new URLSearchParams(search).has("teamProjectId");
     const activeToolSlug = isProjectCanvas ? "projects" : navigationTools.some((tool) => tool.slug === slug) ? (slug as NavigationToolSlug) : undefined;

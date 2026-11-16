@@ -348,6 +348,7 @@ export default {
     },
     navigation: {
         canvas: "My Canvases",
+        cgtw: "CGTW Canvas",
         image: "Image Studio",
         video: "Video Studio",
         prompts: "Prompt Library",

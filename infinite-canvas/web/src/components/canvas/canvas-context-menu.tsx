@@ -4,6 +4,7 @@ import { BetweenHorizontalStart, Download, GalleryHorizontalEnd, GalleryHorizont
 import { useTranslation } from "react-i18next";
 
 import { canvasThemes } from "@/lib/canvas-theme";
+import { CgtwSubmitMenuItem } from "@/components/cgtw/cgtw-submit-menu-item";
 import { useThemeStore } from "@/stores/use-theme-store";
 import type { ContextMenuState } from "@/types/canvas";
 import type { VideoFramePosition } from "@/lib/canvas/canvas-video-frame";
@@ -40,6 +41,7 @@ export function CanvasNodeContextMenu({ menu, canCaptureVideoFrame, canGroup, ca
             {menu.type === "node" && canUngroup ? <MenuButton icon={<Ungroup className="size-4" />} label={t("canvas.nodeToolbar.ungroup")} onClick={onUngroup} /> : null}
             {menu.type === "node" ? <MenuButton icon={<Plus className="size-4" />} label={t("canvas.controls.duplicate")} onClick={onDuplicate} /> : null}
             {menu.type === "node" && canExport ? <MenuButton icon={<Download className="size-4" />} label={t("canvas.exportSelectedContent")} onClick={onExport} /> : null}
+            {menu.type === "node" ? <CgtwSubmitMenuItem nodeId={menu.nodeId} onClose={onClose} /> : null}
             <MenuButton icon={<Trash2 className="size-4" />} label={t("canvas.controls.delete")} onClick={onDelete} danger />
         </div>
     );
