@@ -59,8 +59,9 @@ function render(state) {
   elements.restartButton.disabled = state.status === "starting" || state.status === "stopping" || state.status === "stopped";
   const updating = state.update?.status === "checking" || state.update?.status === "downloading" || state.update?.status === "downloaded";
   elements.port.value = state.settings.port;
-  elements.runtime.querySelector('option[value="dsh"]').disabled = !state.components?.dsh;
-  elements.runtime.querySelector('option[value="dsh"]').textContent = state.components?.dsh ? "DeepSeek Harness" : "DeepSeek Harness（完整版可用）";
+  const dshOption = elements.runtime.querySelector('option[value="dsh"]');
+  dshOption.hidden = !state.components?.dsh;
+  dshOption.disabled = !state.components?.dsh;
   elements.runtime.value = state.settings.runtime;
   elements.canvasUrl.value = state.settings.canvasUrl;
   elements.startOnLaunch.checked = state.settings.startOnLaunch;

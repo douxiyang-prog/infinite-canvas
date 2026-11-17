@@ -134,7 +134,7 @@ export function LocalAgentPanel({ embedded, headless, autoConnect }: { embedded?
     // canvasContext is intentionally excluded because project updates it every frame during dragging and resizing.
     // The panel uses it only for ref synchronization and debounced postState calls, never during rendering.
     // Subscribing here would rerender the panel every frame and amplify the #185 crash, so it is observed imperatively below.
-    const { width, url, token, connected, enabled, prompt, attachments, sending, waiting, tokenUsage, eventLogs, threads, activeThreadId, workspacePath, loadingThreads, activeTab, confirmTools, permissionMode, models, model, reasoningEffort, activity, conversation, connectError, pendingTool, pendingApprovals } = useAgentStore(
+    const { width, url, token, connected, enabled, prompt, attachments, queuedAgentFiles, sending, waiting, tokenUsage, eventLogs, threads, activeThreadId, workspacePath, loadingThreads, activeTab, confirmTools, permissionMode, models, model, reasoningEffort, activity, conversation, connectError, pendingTool, pendingApprovals } = useAgentStore(
         useShallow((state) => ({
             width: state.width,
             url: state.url,
@@ -143,6 +143,7 @@ export function LocalAgentPanel({ embedded, headless, autoConnect }: { embedded?
             enabled: state.enabled,
             prompt: state.prompt,
             attachments: state.attachments,
+            queuedAgentFiles: state.queuedAgentFiles,
             sending: state.sending,
             waiting: state.waiting,
             tokenUsage: state.tokenUsage,
@@ -165,6 +166,7 @@ export function LocalAgentPanel({ embedded, headless, autoConnect }: { embedded?
         })),
     );
     const setAgentState = useAgentStore((state) => state.setAgentState);
+    const takeQueuedAgentFiles = useAgentStore((state) => state.takeQueuedAgentFiles);
     const conversationReady = conversation.status === "ready" || conversation.status === "warning";
     const conversationBusy = conversation.status === "preparing" || conversation.status === "running";
     const closePanel = useAgentStore((state) => state.closePanel);
@@ -755,10 +757,10 @@ export function LocalAgentPanel({ embedded, headless, autoConnect }: { embedded?
     const addAttachments = async (files: FileList | File[] | null) => {
         if (!files) return;
         const images = Array.from(files).filter((file) => file.type.startsWith("image/"));
-        const prev = useAgentStore.getState().attachments;
         try {
+            const current = useAgentStore.getState().attachments;
             const next = await Promise.all(
-                images.slice(0, Math.max(0, MAX_ATTACHMENTS - prev.length)).map(async (file) => {
+                images.slice(0, Math.max(0, MAX_ATTACHMENTS - current.length)).map(async (file) => {
                     const dataUrl = await readDataUrl(file);
                     const meta = await readImageMeta(dataUrl);
                     const url = URL.createObjectURL(file);
@@ -766,7 +768,13 @@ export function LocalAgentPanel({ embedded, headless, autoConnect }: { embedded?
                     return { id: createId(), name: file.name, type: file.type, size: file.size, width: meta.width, height: meta.height, url, dataUrl };
                 }),
             );
-            const merged = [...prev, ...next];
+            const latest = useAgentStore.getState().attachments;
+            const accepted = next.slice(0, Math.max(0, MAX_ATTACHMENTS - latest.length));
+            next.slice(accepted.length).forEach((item) => {
+                URL.revokeObjectURL(item.url);
+                attachmentUrlsRef.current.delete(item.url);
+            });
+            const merged = [...latest, ...accepted];
             if (attachmentPayloadBytes(merged) > MAX_ATTACHMENT_PAYLOAD_BYTES) {
                 next.forEach((item) => {
                     URL.revokeObjectURL(item.url);
@@ -775,11 +783,17 @@ export function LocalAgentPanel({ embedded, headless, autoConnect }: { embedded?
                 addMessage({ role: "error", title: rt("imageTooLarge"), text: rt("imageLimit") });
                 return;
             }
-            if (next.length) setAgentState({ attachments: merged });
+            if (accepted.length) setAgentState({ attachments: merged });
         } catch (error) {
             addMessage({ role: "error", title: rt("imageReadFailed"), text: error instanceof Error ? error.message : rt("imageReadFailed") });
         }
     };
+
+    useEffect(() => {
+        if (!queuedAgentFiles.length) return;
+        const files = takeQueuedAgentFiles();
+        if (files.length) void addAttachments(files);
+    }, [queuedAgentFiles, takeQueuedAgentFiles]);
 
     const removeAttachment = (id: string) => {
         const removed = attachments.find((item) => item.id === id);

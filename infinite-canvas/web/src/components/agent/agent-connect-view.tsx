@@ -60,6 +60,11 @@ export function AgentConnectView({
     const canvasChannels = channels.filter((channel) => channel.baseUrl.trim() && channel.apiKey.trim() && channel.models.some((model) => model.capability === "text"));
     const selectedCanvasChannel = canvasChannels.find((channel) => channel.id === canvasChannelId) || null;
     const selectedCanvasChannelBaseUrl = selectedCanvasChannel ? absoluteChannelBaseUrl(selectedCanvasChannel.baseUrl) : "";
+    const runtimeOptions = [
+        { label: t("agent.connect.dshNative"), value: "ark" as const },
+        ...(dshConfig?.available === false ? [] : [{ label: t("agent.connect.dshHarness"), value: "dsh" as const }]),
+        { label: t("agent.connect.dshCanvas"), value: "canvas" as const },
+    ];
     useEffect(() => {
         if (!connected || !url.trim() || !token.trim()) return;
         let cancelled = false;
@@ -278,11 +283,7 @@ export function AgentConnectView({
                             value={dshConfig.runtime}
                             loading={changingRuntime}
                             onChange={(value) => void changeRuntime(value as "dsh" | "ark" | "canvas")}
-                            options={[
-                                { label: t("agent.connect.dshNative"), value: "ark" },
-                                { label: t("agent.connect.dshHarness"), value: "dsh", disabled: dshConfig.available === false },
-                                { label: t("agent.connect.dshCanvas"), value: "canvas" },
-                            ]}
+                            options={runtimeOptions}
                         />
                         <div className="flex items-start justify-between gap-3">
                             <div>

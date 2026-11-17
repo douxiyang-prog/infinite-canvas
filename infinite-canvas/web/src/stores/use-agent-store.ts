@@ -57,6 +57,7 @@ type AgentStore = {
     fragmentBootstrap: boolean;
     prompt: string;
     attachments: AgentAttachment[];
+    queuedAgentFiles: File[];
     canvasReferences: CanvasResourceReference[];
     sending: boolean;
     waiting: boolean;
@@ -81,16 +82,18 @@ type AgentStore = {
     connectError: string;
     pendingTool: AgentPendingToolCall | null;
     pendingApprovals: AgentPendingApproval[];
-    setAgentState: (patch: Partial<Omit<AgentStore, "setAgentState" | "connectAgent" | "disconnectAgent" | "addMessage" | "addEventLog" | "clearEventLogs" | "openPanel" | "closePanel" | "togglePanel" | "setCanvasContext">>) => void;
+    setAgentState: (patch: Partial<Omit<AgentStore, "setAgentState" | "connectAgent" | "disconnectAgent" | "addMessage" | "addEventLog" | "clearEventLogs" | "openPanel" | "closePanel" | "togglePanel" | "setCanvasContext" | "queueAgentFiles" | "takeQueuedAgentFiles">>) => void;
     openPanel: () => void;
     closePanel: () => void;
     togglePanel: () => void;
     setCanvasContext: (context: AgentCanvasContext | null) => void;
     connectAgent: (options?: { silent?: boolean }) => void;
-    disconnectAgent: (patch?: Partial<Omit<AgentStore, "setAgentState" | "connectAgent" | "disconnectAgent" | "addMessage" | "addEventLog" | "clearEventLogs" | "openPanel" | "closePanel" | "togglePanel" | "setCanvasContext">>) => void;
+    disconnectAgent: (patch?: Partial<Omit<AgentStore, "setAgentState" | "connectAgent" | "disconnectAgent" | "addMessage" | "addEventLog" | "clearEventLogs" | "openPanel" | "closePanel" | "togglePanel" | "setCanvasContext" | "queueAgentFiles" | "takeQueuedAgentFiles">>) => void;
     addMessage: (item: AgentChatItem) => void;
     addEventLog: (item: AgentEventLog) => void;
     clearEventLogs: () => void;
+    queueAgentFiles: (files: File[]) => void;
+    takeQueuedAgentFiles: () => File[];
 };
 
 export const CANVAS_AGENT_PANEL_MOTION_MS = 500;
@@ -109,6 +112,7 @@ export const useAgentStore = create<AgentStore>((set, get) => ({
     fragmentBootstrap: false,
     prompt: "",
     attachments: [],
+    queuedAgentFiles: [],
     canvasReferences: [],
     sending: false,
     waiting: false,
@@ -144,6 +148,15 @@ export const useAgentStore = create<AgentStore>((set, get) => ({
     },
     togglePanel: () => (get().panelOpen ? get().closePanel() : get().openPanel()),
     setCanvasContext: (canvasContext) => set({ canvasContext }),
+    queueAgentFiles: (files) => {
+        if (!files.length) return;
+        set((state) => ({ queuedAgentFiles: [...state.queuedAgentFiles, ...files] }));
+    },
+    takeQueuedAgentFiles: () => {
+        const files = get().queuedAgentFiles;
+        if (files.length) set({ queuedAgentFiles: [] });
+        return files;
+    },
     connectAgent: (options) => {
         const silent = options?.silent ?? false;
         const endpoint = get().url.trim().replace(/\/$/, "");

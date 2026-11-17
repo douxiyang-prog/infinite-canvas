@@ -12,10 +12,10 @@ import { createVideoGenerationTask, isVideoTaskFailed, storeGeneratedVideo, wait
 import { defaultConfig, useConfigStore } from "@/stores/use-config-store";
 import { useCanvasEffectiveConfig, useCanvasImagePreferenceStore } from "@/stores/canvas/use-canvas-image-preference-store";
 import { useUserStore } from "@/stores/use-user-store";
-import { ensureImagePreview, uploadImage } from "@/services/image-storage";
+import { ensureImagePreview, imageToDataUrl, uploadImage } from "@/services/image-storage";
 import { uploadMediaFile, type UploadedFile } from "@/services/file-storage";
 import { nanoid } from "nanoid";
-import { getDataUrlByteSize, readImageMeta } from "@/lib/image-utils";
+import { dataUrlToFile, getDataUrlByteSize, readImageMeta } from "@/lib/image-utils";
 import { estimateVideoGenerationMs } from "@/lib/video-generation-estimate";
 import { imageReferenceLabel } from "@/lib/image-reference-prompt";
 import { canvasThemes, type CanvasBackgroundMode } from "@/lib/canvas-theme";
@@ -1960,6 +1960,37 @@ function InfiniteCanvasPage() {
         saveAs(image.content, `canvas-image-${node.id}-${image.id}.${imageExtension(image.content)}`);
     }, []);
 
+    const pushImageNodeToAgent = useCallback(async (nodeId: string) => {
+        setContextMenu(null);
+        const node = nodesRef.current.find((item) => item.id === nodeId);
+        if (node?.type !== CanvasNodeType.Image || (!node.metadata?.content && !node.metadata?.storageKey)) {
+            message.error(t("canvas.pushImageToAgentFailed"));
+            return;
+        }
+        const hide = message.loading(t("canvas.pushingImageToAgent"), 0);
+        try {
+            const dataUrl = await imageToDataUrl({ dataUrl: node.metadata.content, storageKey: node.metadata.storageKey });
+            const extension = imageExtension(dataUrl);
+            const title = (node.title || t("canvas.nodeTypes.image")).replace(/[\\/:*?"<>|]+/g, "-").replace(/\s+/g, " ").trim().slice(0, 80);
+            const file = dataUrlToFile({
+                id: node.id,
+                name: `${title || "agent-image"}.${extension}`,
+                type: dataUrl.match(/^data:([^;]+)/)?.[1] || node.metadata.mimeType || `image/${extension}`,
+                dataUrl,
+            });
+            const agent = useAgentStore.getState();
+            agent.queueAgentFiles([file]);
+            agent.setAgentState({ activeTab: "chat" });
+            openAgentPanel();
+            message.success(t("canvas.pushedImageToAgent"));
+        } catch (error) {
+            console.error(error);
+            message.error(t("canvas.pushImageToAgentFailed"));
+        } finally {
+            hide();
+        }
+    }, [message, openAgentPanel, t]);
+
     const captureVideoNodeFrame = useCallback(
         async (nodeId: string, position: VideoFramePosition) => {
             setContextMenu(null);
@@ -3766,6 +3797,7 @@ function InfiniteCanvasPage() {
                         canGroup={contextMenu.type === "node" && canGroupSelection}
                         canUngroup={contextMenu.type === "node" && canUngroupSelection}
                         canExport={contextMenu.type === "node" && selectedNodeIds.size > 0}
+                        canPushToAgent={contextMenuNode?.type === CanvasNodeType.Image && Boolean(contextMenuNode.metadata?.content || contextMenuNode.metadata?.storageKey)}
                         onClose={() => setContextMenu(null)}
                         onCaptureVideoFrame={(position) => {
                             if (contextMenu.type !== "node") return;
@@ -3786,6 +3818,9 @@ function InfiniteCanvasPage() {
                                   }
                                 : undefined
                         }
+                        onPushToAgent={() => {
+                            if (contextMenu.type === "node") void pushImageNodeToAgent(contextMenu.nodeId);
+                        }}
                         onDelete={() => {
                             if (contextMenu.type === "node") {
                                 deleteNodes(new Set([contextMenu.nodeId]));

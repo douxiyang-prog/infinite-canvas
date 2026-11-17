@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 import type { ReactNode } from "react";
-import { BetweenHorizontalStart, Download, GalleryHorizontalEnd, GalleryHorizontal, Group, Plus, Trash2, Ungroup } from "lucide-react";
+import { BetweenHorizontalStart, Download, GalleryHorizontalEnd, GalleryHorizontal, Group, Plus, ScanSearch, Trash2, Ungroup } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 import { canvasThemes } from "@/lib/canvas-theme";
@@ -9,7 +9,7 @@ import { useThemeStore } from "@/stores/use-theme-store";
 import type { ContextMenuState } from "@/types/canvas";
 import type { VideoFramePosition } from "@/lib/canvas/canvas-video-frame";
 
-export function CanvasNodeContextMenu({ menu, canCaptureVideoFrame, canGroup, canUngroup, canExport, onClose, onCaptureVideoFrame, onDuplicate, onGroup, onUngroup, onExport, onDelete }: { menu: ContextMenuState; canCaptureVideoFrame: boolean; canGroup?: boolean; canUngroup?: boolean; canExport?: boolean; onClose: () => void; onCaptureVideoFrame: (position: VideoFramePosition) => void; onDuplicate: () => void; onGroup?: () => void; onUngroup?: () => void; onExport?: () => void; onDelete: () => void }) {
+export function CanvasNodeContextMenu({ menu, canCaptureVideoFrame, canGroup, canUngroup, canExport, canPushToAgent, onClose, onCaptureVideoFrame, onDuplicate, onGroup, onUngroup, onExport, onPushToAgent, onDelete }: { menu: ContextMenuState; canCaptureVideoFrame: boolean; canGroup?: boolean; canUngroup?: boolean; canExport?: boolean; canPushToAgent: boolean; onClose: () => void; onCaptureVideoFrame: (position: VideoFramePosition) => void; onDuplicate: () => void; onGroup?: () => void; onUngroup?: () => void; onExport?: () => void; onPushToAgent: () => void; onDelete: () => void }) {
     const { t } = useTranslation();
     const theme = canvasThemes[useThemeStore((state) => state.theme)];
 
@@ -41,6 +41,7 @@ export function CanvasNodeContextMenu({ menu, canCaptureVideoFrame, canGroup, ca
             {menu.type === "node" && canUngroup ? <MenuButton icon={<Ungroup className="size-4" />} label={t("canvas.nodeToolbar.ungroup")} onClick={onUngroup} /> : null}
             {menu.type === "node" ? <MenuButton icon={<Plus className="size-4" />} label={t("canvas.controls.duplicate")} onClick={onDuplicate} /> : null}
             {menu.type === "node" && canExport ? <MenuButton icon={<Download className="size-4" />} label={t("canvas.exportSelectedContent")} onClick={onExport} /> : null}
+            {menu.type === "node" && canPushToAgent ? <MenuButton icon={<ScanSearch className="size-4" />} label={t("canvas.pushImageToAgent")} onClick={onPushToAgent} /> : null}
             {menu.type === "node" ? <CgtwSubmitMenuItem nodeId={menu.nodeId} onClose={onClose} /> : null}
             <MenuButton icon={<Trash2 className="size-4" />} label={t("canvas.controls.delete")} onClick={onDelete} danger />
         </div>

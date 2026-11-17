@@ -32,7 +32,7 @@ npm run dist:full   # 完整版
 
 两个版本使用同一个应用 ID，可以互相覆盖安装，安装包分别命名为 `canvas-agent-manager-<版本>-lite-setup.exe` 和 `canvas-agent-manager-<版本>-full-setup.exe`：
 
-- **精简版**：只内置火山原生 API 与 Canvas 渠道（约 18 MB、4 千多个依赖文件），安装很快。DeepSeek Harness 与 Codex 是 `canvas-agent` 的可选依赖，精简版不包含；选择 DSH 时会自动回退到 Canvas 渠道。
+- **精简版**：只内置火山原生 API 与 Canvas 渠道（约 18 MB、4 千多个依赖文件），安装很快。DeepSeek Harness 与 Codex 是 `canvas-agent` 的可选依赖，精简版不包含，因此运行时候选里不会显示 DeepSeek Harness。
 - **完整版**：额外内置 DeepSeek Harness 与 Codex（约 1.2 GB、8 万个文件），安装较慢。
 
 构建脚本会：
