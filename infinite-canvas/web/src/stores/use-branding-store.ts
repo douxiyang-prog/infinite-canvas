@@ -6,6 +6,8 @@ import { fetchBranding, type BrandingInfo, type LoginBackgroundMode } from "@/se
 type BrandingStore = {
     companyName: string;
     loginBackground: LoginBackgroundMode;
+    loginLogoOffsetX: number;
+    loginLogoOffsetY: number;
     logoUrl: string;
     loadBranding: () => Promise<void>;
     applyBranding: (branding: BrandingInfo) => void;
@@ -16,6 +18,8 @@ let brandingRequest: Promise<void> | null = null;
 export const useBrandingStore = create<BrandingStore>()((set, get) => ({
     companyName: COMPANY_NAME,
     loginBackground: "original",
+    loginLogoOffsetX: 0,
+    loginLogoOffsetY: 0,
     logoUrl: COMPANY_LOGO_URL,
     loadBranding: () => {
         if (brandingRequest) return brandingRequest;
@@ -33,6 +37,8 @@ export const useBrandingStore = create<BrandingStore>()((set, get) => ({
         set((state) => ({
             companyName: branding.companyName || state.companyName || COMPANY_NAME,
             loginBackground: branding.loginBackground || state.loginBackground || "original",
+            loginLogoOffsetX: typeof branding.loginLogoOffsetX === "number" ? branding.loginLogoOffsetX : state.loginLogoOffsetX,
+            loginLogoOffsetY: typeof branding.loginLogoOffsetY === "number" ? branding.loginLogoOffsetY : state.loginLogoOffsetY,
             logoUrl: branding.logoUrl || state.logoUrl || COMPANY_LOGO_URL,
         })),
 }));

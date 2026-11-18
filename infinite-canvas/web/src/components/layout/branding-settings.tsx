@@ -1,29 +1,52 @@
-import { Save, UploadCloud } from "lucide-react";
+import { ArrowDown, ArrowLeft, ArrowRight, ArrowUp, RotateCcw, Save, UploadCloud } from "lucide-react";
 import { useEffect, useState } from "react";
-import { App, Button, Form, Input, Segmented, Upload } from "antd";
+import { App, Button, Form, Input, InputNumber, Segmented, Upload } from "antd";
 import type { UploadProps } from "antd";
 
 import { BrandLogo } from "@/components/layout/brand-logo";
-import { BRANDING_LOGO_TYPES, MAX_BRANDING_LOGO_BYTES, updateBrandingCompanyName, updateLoginBackground, uploadBrandingLogo, type LoginBackgroundMode } from "@/services/api/branding";
+import {
+    BRANDING_LOGO_TYPES,
+    LOGIN_LOGO_OFFSET_LIMIT,
+    MAX_BRANDING_LOGO_BYTES,
+    updateBrandingCompanyName,
+    updateLoginBackground,
+    updateLoginLogoOffset,
+    uploadBrandingLogo,
+    type LoginBackgroundMode,
+} from "@/services/api/branding";
 import { useBrandingStore } from "@/stores/use-branding-store";
 
 type BrandingValues = {
     companyName: string;
 };
 
+function clampLogoOffset(value: number) {
+    return Math.min(LOGIN_LOGO_OFFSET_LIMIT, Math.max(-LOGIN_LOGO_OFFSET_LIMIT, Math.round(value)));
+}
+
 export function BrandingSettings() {
     const { message } = App.useApp();
     const [form] = Form.useForm<BrandingValues>();
     const companyName = useBrandingStore((state) => state.companyName);
     const loginBackground = useBrandingStore((state) => state.loginBackground);
+    const loginLogoOffsetX = useBrandingStore((state) => state.loginLogoOffsetX);
+    const loginLogoOffsetY = useBrandingStore((state) => state.loginLogoOffsetY);
     const applyBranding = useBrandingStore((state) => state.applyBranding);
     const [savingName, setSavingName] = useState(false);
     const [savingBackground, setSavingBackground] = useState(false);
+    const [savingLogoOffset, setSavingLogoOffset] = useState(false);
     const [uploadingLogo, setUploadingLogo] = useState(false);
+    const [logoOffsetX, setLogoOffsetX] = useState(loginLogoOffsetX);
+    const [logoOffsetY, setLogoOffsetY] = useState(loginLogoOffsetY);
 
     useEffect(() => {
         form.setFieldsValue({ companyName });
     }, [companyName, form]);
+
+    useEffect(() => {
+        setLogoOffsetX(loginLogoOffsetX);
+        setLogoOffsetY(loginLogoOffsetY);
+    }, [loginLogoOffsetX, loginLogoOffsetY]);
 
     const saveCompanyName = async ({ companyName: value }: BrandingValues) => {
         setSavingName(true);
@@ -71,21 +94,106 @@ export function BrandingSettings() {
         }
     };
 
+    const saveLogoOffset = async () => {
+        setSavingLogoOffset(true);
+        try {
+            applyBranding(await updateLoginLogoOffset(logoOffsetX, logoOffsetY));
+            message.success("登录页 Logo 偏移已更新");
+        } catch (error) {
+            message.error(error instanceof Error ? error.message : "保存 Logo 偏移失败");
+        } finally {
+            setSavingLogoOffset(false);
+        }
+    };
+
+    const nudgeLogo = (deltaX: number, deltaY: number) => {
+        setLogoOffsetX((value) => clampLogoOffset(value + deltaX));
+        setLogoOffsetY((value) => clampLogoOffset(value + deltaY));
+    };
+
     return (
         <div className="space-y-5">
             <div className="grid auto-rows-max items-start gap-5 md:grid-cols-2">
-                <section className="rounded-xl border border-stone-200 p-5 dark:border-stone-800">
-                    <h2 className="text-base font-medium">公司名称</h2>
-                    <p className="mt-1 text-sm text-stone-500">用于登录页、首页、顶部导航和浏览器标题。</p>
-                    <Form form={form} layout="vertical" requiredMark={false} onFinish={(values) => void saveCompanyName(values)} className="mt-5">
-                        <Form.Item label="名称" name="companyName" rules={[{ required: true, whitespace: true, message: "请输入公司名称" }, { max: 100, message: "公司名称不能超过 100 个字符" }]}>
-                            <Input size="large" maxLength={100} showCount />
-                        </Form.Item>
-                        <Button type="primary" htmlType="submit" loading={savingName} icon={<Save className="size-4" />}>
-                            保存名称
-                        </Button>
-                    </Form>
-                </section>
+                <div className="space-y-5">
+                    <section className="rounded-xl border border-stone-200 p-5 dark:border-stone-800">
+                        <h2 className="text-base font-medium">公司名称</h2>
+                        <p className="mt-1 text-sm text-stone-500">用于登录页、首页、顶部导航和浏览器标题。</p>
+                        <Form form={form} layout="vertical" requiredMark={false} onFinish={(values) => void saveCompanyName(values)} className="mt-5">
+                            <Form.Item label="名称" name="companyName" rules={[{ required: true, whitespace: true, message: "请输入公司名称" }, { max: 100, message: "公司名称不能超过 100 个字符" }]}>
+                                <Input size="large" maxLength={100} showCount />
+                            </Form.Item>
+                            <Button type="primary" htmlType="submit" loading={savingName} icon={<Save className="size-4" />}>
+                                保存名称
+                            </Button>
+                        </Form>
+                    </section>
+
+                    <section className="rounded-xl border border-stone-200 p-5 dark:border-stone-800">
+                        <h2 className="text-base font-medium">登录页 Logo 偏移</h2>
+                        <p className="mt-1 text-sm text-stone-500">负数向左或向上，正数向右或向下，单位为像素。</p>
+                        <div className="mt-5 grid gap-4 sm:grid-cols-2">
+                            <label className="text-sm text-stone-600 dark:text-stone-300">
+                                水平偏移
+                                <InputNumber
+                                    className="mt-2 !w-full"
+                                    value={logoOffsetX}
+                                    min={-LOGIN_LOGO_OFFSET_LIMIT}
+                                    max={LOGIN_LOGO_OFFSET_LIMIT}
+                                    precision={0}
+                                    addonAfter="px"
+                                    onChange={(value) => setLogoOffsetX(clampLogoOffset(Number(value ?? 0)))}
+                                />
+                            </label>
+                            <label className="text-sm text-stone-600 dark:text-stone-300">
+                                垂直偏移
+                                <InputNumber
+                                    className="mt-2 !w-full"
+                                    value={logoOffsetY}
+                                    min={-LOGIN_LOGO_OFFSET_LIMIT}
+                                    max={LOGIN_LOGO_OFFSET_LIMIT}
+                                    precision={0}
+                                    addonAfter="px"
+                                    onChange={(value) => setLogoOffsetY(clampLogoOffset(Number(value ?? 0)))}
+                                />
+                            </label>
+                        </div>
+                        <div className="relative mt-4 h-20 overflow-hidden rounded-lg border border-stone-200 bg-[radial-gradient(rgba(120,113,108,.22)_1px,transparent_1px)] [background-size:12px_12px] dark:border-stone-800">
+                            <span className="absolute inset-y-0 left-1/2 w-px bg-stone-300 dark:bg-stone-700" />
+                            <span className="absolute inset-x-0 top-1/2 h-px bg-stone-300 dark:bg-stone-700" />
+                            <span className="absolute left-3 top-2 rounded bg-background/80 px-1.5 py-0.5 text-xs text-stone-500">
+                                X {logoOffsetX}px · Y {logoOffsetY}px
+                            </span>
+                            <div
+                                className="absolute left-1/2 top-1/2"
+                                style={{ transform: `translate(calc(-50% + ${logoOffsetX}px), calc(-50% + ${logoOffsetY}px))` }}
+                            >
+                                <BrandLogo className="h-10 w-auto max-w-32" />
+                            </div>
+                        </div>
+                        <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+                            <div className="flex gap-1.5">
+                                <Button size="small" title="上移 1px" aria-label="上移 1px" icon={<ArrowUp className="size-4" />} onClick={() => nudgeLogo(0, -1)} />
+                                <Button size="small" title="下移 1px" aria-label="下移 1px" icon={<ArrowDown className="size-4" />} onClick={() => nudgeLogo(0, 1)} />
+                                <Button size="small" title="左移 1px" aria-label="左移 1px" icon={<ArrowLeft className="size-4" />} onClick={() => nudgeLogo(-1, 0)} />
+                                <Button size="small" title="右移 1px" aria-label="右移 1px" icon={<ArrowRight className="size-4" />} onClick={() => nudgeLogo(1, 0)} />
+                            </div>
+                            <div className="flex gap-2">
+                                <Button
+                                    icon={<RotateCcw className="size-4" />}
+                                    onClick={() => {
+                                        setLogoOffsetX(0);
+                                        setLogoOffsetY(0);
+                                    }}
+                                >
+                                    归零
+                                </Button>
+                                <Button type="primary" loading={savingLogoOffset} icon={<Save className="size-4" />} onClick={() => void saveLogoOffset()}>
+                                    保存偏移
+                                </Button>
+                            </div>
+                        </div>
+                    </section>
+                </div>
 
                 <section className="rounded-xl border border-stone-200 p-5 dark:border-stone-800">
                     <h2 className="text-base font-medium">公司 Logo</h2>

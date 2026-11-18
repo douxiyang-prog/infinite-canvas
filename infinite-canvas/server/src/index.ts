@@ -11,6 +11,7 @@ import {
   MAX_LOGO_BYTES,
   updateCompanyName,
   updateLoginBackground,
+  updateLoginLogoOffset,
   updateLogo,
 } from "./branding";
 import { config } from "./config";
@@ -546,6 +547,26 @@ async function handleApi(request: Request, url: URL) {
     )
       throw new HttpError(400, "登录页背景选项不正确");
     return json(await updateLoginBackground(body.loginBackground));
+  }
+
+  if (
+    request.method === "PATCH" &&
+    url.pathname === "/api/admin/branding/login-logo-offset"
+  ) {
+    await requireAdmin(request);
+    const body = await readJson(request);
+    const x = body.loginLogoOffsetX;
+    const y = body.loginLogoOffsetY;
+    if (
+      typeof x !== "number" ||
+      typeof y !== "number" ||
+      !Number.isInteger(x) ||
+      !Number.isInteger(y) ||
+      Math.abs(x) > 500 ||
+      Math.abs(y) > 500
+    )
+      throw new HttpError(400, "Logo 偏移必须是 -500 到 500 之间的整数");
+    return json(await updateLoginLogoOffset(x, y));
   }
 
   if (request.method === "POST" && url.pathname === "/api/admin/users") {

@@ -8,6 +8,8 @@ export const MAX_LOGO_BYTES = 2 * 1024 * 1024;
 type BrandingRow = RowDataPacket & {
   company_name: string;
   login_background: string | null;
+  login_logo_offset_x: number | null;
+  login_logo_offset_y: number | null;
   logo_mime: string | null;
   logo_updated_at: Date | string | null;
 };
@@ -20,6 +22,8 @@ type LogoRow = RowDataPacket & {
 export type BrandingInfo = {
   companyName: string | null;
   loginBackground: "original" | "nebula";
+  loginLogoOffsetX: number;
+  loginLogoOffsetY: number;
   logoUrl: string | null;
   updatedAt: string | null;
 };
@@ -34,7 +38,7 @@ function dateIso(value: Date | string | null) {
 
 export async function getBranding(): Promise<BrandingInfo> {
   const [rows] = await db.query<BrandingRow[]>(
-    "SELECT company_name, login_background, logo_mime, logo_updated_at FROM app_settings WHERE id = 1",
+    "SELECT company_name, login_background, login_logo_offset_x, login_logo_offset_y, logo_mime, logo_updated_at FROM app_settings WHERE id = 1",
   );
   const row = rows[0];
   const updatedAt = dateIso(row?.logo_updated_at ?? null);
@@ -42,6 +46,8 @@ export async function getBranding(): Promise<BrandingInfo> {
     companyName: row?.company_name || null,
     loginBackground:
       row?.login_background === "nebula" ? "nebula" : "original",
+    loginLogoOffsetX: Number(row?.login_logo_offset_x ?? 0),
+    loginLogoOffsetY: Number(row?.login_logo_offset_y ?? 0),
     logoUrl:
       row?.logo_mime && updatedAt
         ? `/api/branding/logo?v=${encodeURIComponent(updatedAt)}`
@@ -66,6 +72,20 @@ export async function updateLoginBackground(
     `INSERT INTO app_settings (id, login_background) VALUES (1, ?)
      ON DUPLICATE KEY UPDATE login_background = VALUES(login_background)`,
     [loginBackground],
+  );
+  return getBranding();
+}
+
+export async function updateLoginLogoOffset(
+  loginLogoOffsetX: number,
+  loginLogoOffsetY: number,
+) {
+  await db.execute(
+    `INSERT INTO app_settings (id, login_logo_offset_x, login_logo_offset_y) VALUES (1, ?, ?)
+     ON DUPLICATE KEY UPDATE
+       login_logo_offset_x = VALUES(login_logo_offset_x),
+       login_logo_offset_y = VALUES(login_logo_offset_y)`,
+    [loginLogoOffsetX, loginLogoOffsetY],
   );
   return getBranding();
 }

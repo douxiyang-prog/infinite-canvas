@@ -3,6 +3,8 @@ import { apiRequest } from "@/services/api/auth";
 export type BrandingInfo = {
     companyName: string | null;
     loginBackground: LoginBackgroundMode;
+    loginLogoOffsetX: number;
+    loginLogoOffsetY: number;
     logoUrl: string | null;
     updatedAt: string | null;
 };
@@ -11,6 +13,7 @@ export type LoginBackgroundMode = "original" | "nebula";
 
 export const MAX_BRANDING_LOGO_BYTES = 2 * 1024 * 1024;
 export const BRANDING_LOGO_TYPES = ["image/png", "image/jpeg", "image/webp"];
+export const LOGIN_LOGO_OFFSET_LIMIT = 500;
 
 export async function fetchBranding() {
     return apiRequest<BrandingInfo>("/api/branding");
@@ -27,6 +30,13 @@ export async function updateLoginBackground(loginBackground: LoginBackgroundMode
     return apiRequest<BrandingInfo>("/api/admin/branding/login-background", {
         method: "PATCH",
         body: JSON.stringify({ loginBackground }),
+    });
+}
+
+export async function updateLoginLogoOffset(loginLogoOffsetX: number, loginLogoOffsetY: number) {
+    return apiRequest<BrandingInfo>("/api/admin/branding/login-logo-offset", {
+        method: "PATCH",
+        body: JSON.stringify({ loginLogoOffsetX, loginLogoOffsetY }),
     });
 }
 

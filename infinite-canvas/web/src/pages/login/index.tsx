@@ -21,6 +21,8 @@ export default function LoginPage() {
     const user = useUserStore((state) => state.user);
     const companyName = useBrandingStore((state) => state.companyName);
     const loginBackground = useBrandingStore((state) => state.loginBackground);
+    const loginLogoOffsetX = useBrandingStore((state) => state.loginLogoOffsetX);
+    const loginLogoOffsetY = useBrandingStore((state) => state.loginLogoOffsetY);
     const login = useUserStore((state) => state.login);
     const loadSession = useUserStore((state) => state.loadSession);
     const [submitting, setSubmitting] = useState(false);
@@ -61,26 +63,23 @@ export default function LoginPage() {
             <section
                 className={
                     nebulaBackground
-                        ? "relative z-10 w-full max-w-[420px] rounded-2xl border border-white/80 bg-white/78 p-7 shadow-[0_28px_90px_-32px_rgba(51,65,85,.45)] backdrop-blur-2xl dark:border-white/[.12] dark:bg-black/72 dark:shadow-[0_28px_100px_-28px_rgba(0,0,0,.95)]"
-                        : "w-full max-w-[420px] rounded-2xl border border-stone-200 bg-background p-7 shadow-sm dark:border-stone-800"
+                        ? "relative z-10 w-full max-w-[420px] overflow-hidden rounded-2xl border border-white/80 bg-white/78 p-7 shadow-[0_28px_90px_-32px_rgba(51,65,85,.45)] backdrop-blur-2xl dark:border-white/[.12] dark:bg-black/72 dark:shadow-[0_28px_100px_-28px_rgba(0,0,0,.95)]"
+                        : "relative w-full max-w-[420px] overflow-hidden rounded-2xl border border-stone-200 bg-background p-7 shadow-sm dark:border-stone-800"
                 }
             >
-                <div className="mb-7 flex items-center gap-3">
-                    <span className="grid size-14 shrink-0 place-items-center rounded-xl border border-stone-800 bg-stone-950">
-                        <BrandLogo className="size-9" invertOnDark={false} />
-                    </span>
-                    <div>
-                        <h1 className="text-xl font-semibold">登录{companyName || "无限画布"}</h1>
-                        <p className="mt-1 text-sm text-stone-500">使用管理员分配给你的账号继续</p>
+                <div className="relative mb-7 flex items-baseline justify-start gap-3 sm:gap-4">
+                    <div className="shrink-0" style={{ transform: `translate(${loginLogoOffsetX}px, ${loginLogoOffsetY}px)` }}>
+                        <BrandLogo className="h-16 w-auto max-w-36" />
                     </div>
+                    <h1 className="min-w-0 break-words text-4xl font-semibold leading-none tracking-tight sm:text-5xl">{companyName || "无限画布"}</h1>
                 </div>
 
-                <Form<LoginValues> layout="vertical" requiredMark={false} onFinish={(values) => void submit(values)}>
+                <Form<LoginValues> className="relative" layout="vertical" requiredMark={false} onFinish={(values) => void submit(values)}>
                     <Form.Item label="用户名" name="username" rules={[{ required: true, message: "请输入用户名" }]}>
-                        <Input size="large" autoComplete="username" autoFocus />
+                        <Input classNames={{ root: "!bg-white/50 dark:!bg-black/50", input: "bg-transparent" }} size="large" autoComplete="username" autoFocus />
                     </Form.Item>
                     <Form.Item label="密码" name="password" rules={[{ required: true, message: "请输入密码" }]}>
-                        <Input.Password size="large" autoComplete="current-password" />
+                        <Input.Password classNames={{ root: "!bg-white/50 dark:!bg-black/50", input: "bg-transparent" }} size="large" autoComplete="current-password" />
                     </Form.Item>
                     <Button className="mt-2 w-full" type="primary" size="large" htmlType="submit" loading={submitting} icon={<LogIn className="size-4" />}>
                         登录

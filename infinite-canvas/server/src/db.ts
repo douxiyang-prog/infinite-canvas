@@ -47,6 +47,22 @@ export async function migrate() {
       "ALTER TABLE app_settings ADD COLUMN login_background VARCHAR(20) NOT NULL DEFAULT 'original' AFTER company_name",
     );
   }
+  const [logoOffsetXColumns] = await db.query<
+    Array<RowDataPacket & { Field: string }>
+  >("SHOW COLUMNS FROM app_settings LIKE 'login_logo_offset_x'");
+  if (!logoOffsetXColumns.length) {
+    await db.query(
+      "ALTER TABLE app_settings ADD COLUMN login_logo_offset_x SMALLINT NOT NULL DEFAULT 0 AFTER login_background",
+    );
+  }
+  const [logoOffsetYColumns] = await db.query<
+    Array<RowDataPacket & { Field: string }>
+  >("SHOW COLUMNS FROM app_settings LIKE 'login_logo_offset_y'");
+  if (!logoOffsetYColumns.length) {
+    await db.query(
+      "ALTER TABLE app_settings ADD COLUMN login_logo_offset_y SMALLINT NOT NULL DEFAULT 0 AFTER login_logo_offset_x",
+    );
+  }
   const [canvasProjectColumns] = await db.query<
     Array<RowDataPacket & { Field: string }>
   >("SHOW COLUMNS FROM canvas_projects LIKE 'team_project_id'");
