@@ -123,7 +123,7 @@ export default function ImagePage() {
         const nextReferences = await Promise.all(
             imageFiles.map(async (file) => {
                 const image = await uploadImage(file);
-                return { id: nanoid(), name: file.name, type: image.mimeType, dataUrl: image.url, storageKey: image.storageKey };
+                return { id: nanoid(), name: file.name, type: image.mimeType, dataUrl: image.url, storageKey: image.storageKey, width: image.width, height: image.height };
             }),
         );
         setReferences((value) => [...value, ...nextReferences]);
@@ -140,7 +140,7 @@ export default function ImagePage() {
             const nextReferences = await Promise.all(
                 blobs.map(async (blob, index) => {
                     const image = await uploadImage(blob);
-                    return { id: nanoid(), name: `clipboard-${index + 1}.png`, type: image.mimeType, dataUrl: image.url, storageKey: image.storageKey };
+                    return { id: nanoid(), name: `clipboard-${index + 1}.png`, type: image.mimeType, dataUrl: image.url, storageKey: image.storageKey, width: image.width, height: image.height };
                 }),
             );
             setReferences((value) => [...value, ...nextReferences]);
@@ -238,7 +238,7 @@ export default function ImagePage() {
 
     const addResultToReferences = async (image: GeneratedImage, index: number) => {
         const stored = await uploadImage(image.dataUrl, { area: "output" });
-        setReferences((value) => [...value, { id: nanoid(), name: `result-${index + 1}.png`, type: stored.mimeType, dataUrl: stored.url, storageKey: stored.storageKey }]);
+        setReferences((value) => [...value, { id: nanoid(), name: `result-${index + 1}.png`, type: stored.mimeType, dataUrl: stored.url, storageKey: stored.storageKey, width: stored.width, height: stored.height }]);
         message.success(t("imageWorkbench.addedReference"));
     };
 
@@ -265,7 +265,7 @@ export default function ImagePage() {
             setPrompt(payload.content);
         } else if (payload.kind === "image") {
             const stored = await uploadImage(payload.dataUrl);
-            setReferences((value) => [...value, { id: nanoid(), name: payload.title, type: stored.mimeType, dataUrl: stored.url, storageKey: stored.storageKey }]);
+            setReferences((value) => [...value, { id: nanoid(), name: payload.title, type: stored.mimeType, dataUrl: stored.url, storageKey: stored.storageKey, width: stored.width, height: stored.height }]);
         } else {
             message.warning(t("imageWorkbench.unsupportedAsset"));
         }

@@ -1,10 +1,11 @@
 import { type ReactNode, useState } from "react";
 import { ConfigProvider, Switch } from "antd";
+import { Sparkles } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 import i18n from "@/i18n";
 import { type CanvasTheme } from "@/lib/canvas-theme";
-import { computeMediaSize, inferMediaRatio, inferMediaScale, mediaRatioOptions, mediaScaleOptions, readMediaDimensions } from "@/lib/media-size";
+import { computeMediaSize, inferMediaRatio, inferMediaScale, isSmartImageSize, mediaRatioOptions, mediaScaleOptions, readMediaDimensions, SMART_IMAGE_SIZE } from "@/lib/media-size";
 import type { AiConfig } from "@/stores/use-config-store";
 
 const qualityOptions = [
@@ -18,7 +19,7 @@ const qualityOptions = [
 const DIMENSION_STEP = 16;
 
 export const imageQualityOptions = qualityOptions.map((item) => ({ value: item.value, get label() { return i18n.t(`settingsPanels.common.${item.labelKey}`); } }));
-export const imageAspectOptions = mediaRatioOptions.map((item) => ({ value: item.value, label: item.value === "auto" ? i18n.t("settingsPanels.common.auto") : item.value }));
+export const imageAspectOptions = [{ value: SMART_IMAGE_SIZE, label: i18n.t("settingsPanels.image.smartRatio") }, ...mediaRatioOptions].map((item) => ({ value: item.value, label: item.value === "auto" ? i18n.t("settingsPanels.common.auto") : item.value === SMART_IMAGE_SIZE ? i18n.t("settingsPanels.image.smartRatio") : item.value }));
 export const imageScaleOptions = mediaScaleOptions.map((value) => ({ value, label: value === "auto" ? i18n.t("settingsPanels.common.auto") : value }));
 
 type ImageSettingsPanelProps = {
@@ -91,20 +92,22 @@ export function ImageSettingsPanel({ config, onConfigChange, theme, showTitle = 
                         <DimensionInput prefix="H" value={dimensions.height} disabled={selectedRatio === "auto"} theme={theme} alignToStep={snapDimensionToStep} onChange={(value) => updateDimension("height", value)} />
                     </div>
                 </div>
-                <div className="space-y-2.5">
-                    <SettingTitle color={theme.node.muted}>{t("settingsPanels.image.resolution")}</SettingTitle>
-                    <div className="grid grid-cols-4 gap-2.5">
-                        {mediaScaleOptions.map((value) => (
-                            <OptionPill key={value} selected={selectedScale === value} theme={theme} onClick={() => selectScale(value)}>
-                                {value === "auto" ? t("settingsPanels.common.auto") : value}
-                            </OptionPill>
-                        ))}
+                {selectedRatio !== SMART_IMAGE_SIZE ? (
+                    <div className="space-y-2.5">
+                        <SettingTitle color={theme.node.muted}>{t("settingsPanels.image.resolution")}</SettingTitle>
+                        <div className="grid grid-cols-4 gap-2.5">
+                            {mediaScaleOptions.map((value) => (
+                                <OptionPill key={value} selected={selectedScale === value} theme={theme} onClick={() => selectScale(value)}>
+                                    {value === "auto" ? t("settingsPanels.common.auto") : value}
+                                </OptionPill>
+                            ))}
+                        </div>
                     </div>
-                </div>
+                ) : null}
                 <div className="space-y-2.5">
                     <SettingTitle color={theme.node.muted}>{t("settingsPanels.image.aspectRatio")}</SettingTitle>
                     <div className="grid grid-cols-4 gap-2.5">
-                        {mediaRatioOptions.map((item) => (
+                        {[{ value: SMART_IMAGE_SIZE, width: 0, height: 0 }, ...mediaRatioOptions].map((item) => (
                             <button
                                 key={item.value}
                                 type="button"
@@ -113,11 +116,16 @@ export function ImageSettingsPanel({ config, onConfigChange, theme, showTitle = 
                                 onMouseDown={(event) => event.stopPropagation()}
                                 onClick={() => selectRatio(item.value)}
                             >
-                                <AspectIcon width={item.width} height={item.height} color={theme.node.text} />
-                                <span>{item.value === "auto" ? t("settingsPanels.common.auto") : item.value}</span>
+                                {item.value === SMART_IMAGE_SIZE ? <Sparkles className="size-5" /> : <AspectIcon width={item.width} height={item.height} color={theme.node.text} />}
+                                <span>{item.value === "auto" ? t("settingsPanels.common.auto") : item.value === SMART_IMAGE_SIZE ? t("settingsPanels.image.smartRatio") : item.value}</span>
                             </button>
                         ))}
                     </div>
+                    {selectedRatio === SMART_IMAGE_SIZE ? (
+                        <p className="text-xs leading-5" style={{ color: theme.node.muted }}>
+                            {t("settingsPanels.image.smartRatioHint")}
+                        </p>
+                    ) : null}
                 </div>
                 <div className="flex items-center justify-between gap-3">
                     <div className="space-y-0.5">
@@ -167,6 +175,9 @@ export function imageQualityLabel(value: string) {
 }
 
 export function imageSizeLabel(size: string) {
+    if (isSmartImageSize(size)) {
+        return i18n.t("settingsPanels.image.smartRatio");
+    }
     const scale = inferMediaScale(size);
     const ratio = inferMediaRatio(size);
     if (ratio === "auto" || size === "auto") return i18n.t("settingsPanels.common.auto");
@@ -174,11 +185,12 @@ export function imageSizeLabel(size: string) {
     return `${scale} · ${ratio}`;
 }
 
-function OptionPill({ selected, theme, onClick, children }: { selected: boolean; theme: CanvasTheme; onClick: () => void; children: ReactNode }) {
+function OptionPill({ selected, disabled = false, theme, onClick, children }: { selected: boolean; disabled?: boolean; theme: CanvasTheme; onClick: () => void; children: ReactNode }) {
     return (
         <button
             type="button"
-            className="h-9 cursor-pointer rounded-full border px-2 text-sm transition hover:opacity-80"
+            disabled={disabled}
+            className={`h-9 rounded-full border px-2 text-sm transition ${disabled ? "cursor-not-allowed opacity-45" : "cursor-pointer hover:opacity-80"}`}
             style={{ background: "transparent", borderColor: selected ? theme.node.text : theme.node.stroke, color: theme.node.text }}
             onMouseDown={(event) => event.stopPropagation()}
             onClick={onClick}

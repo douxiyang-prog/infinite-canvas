@@ -1,6 +1,6 @@
 {
   "name": "@basketikun/canvas-agent-manager",
-  "version": "0.1.4",
+  "version": "0.1.6",
   "private": true,
   "description": "Desktop manager for Infinite Canvas Agent",
   "main": "dist/main.js",

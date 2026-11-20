@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { CodexAppClient } from "./codex-client.js";
-import { assertDraftHasNoSensitiveValues, canvasSkillSource } from "./codex.js";
+import { assertDraftHasNoSensitiveValues, canvasSkillSource, isCodexThreadId, isRecoverableThreadError } from "./codex.js";
 
 type TestClient = {
     currentThreadId: string;
@@ -18,6 +18,15 @@ type TestClient = {
 };
 
 const emptyEventHistory = { record: () => Promise.resolve(), recordTurn: () => Promise.resolve() };
+
+test("Codex 会话 ID 校验拒绝其他 Agent 后端的历史 ID", () => {
+    assert.equal(isCodexThreadId("01a1f887-2eb1-7302-b0aa-988bb95111ec"), true);
+    assert.equal(isCodexThreadId("urn:uuid:01a1f887-2eb1-7302-b0aa-988bb95111ec"), true);
+    assert.equal(isCodexThreadId("dsh-ee137b08-5d04-4cb1-a954-2899c7b1723f"), false);
+    assert.equal(isCodexThreadId(""), false);
+    assert.equal(isRecoverableThreadError(new Error("invalid session id: invalid character: expected an optional prefix of `urn:uuid:` followed by [0-9a-fA-F-], found `s` at 2")), true);
+    assert.equal(isRecoverableThreadError(new Error("invalid thread id: invalid character: expected an optional prefix of `urn:uuid:` followed by [0-9a-fA-F-], found `s` at 2")), true);
+});
 
 test("审批只在 app-server 确认 resolved 后清除", () => {
     const writes: Array<Record<string, unknown>> = [];

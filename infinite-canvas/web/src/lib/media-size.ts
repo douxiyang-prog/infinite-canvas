@@ -1,4 +1,6 @@
 export const mediaScaleOptions = ["1k", "2k", "4k", "auto"] as const;
+export const SMART_IMAGE_SIZE = "smart";
+export const SMART_IMAGE_MAX_PIXELS = 4624220;
 export const mediaRatioOptions = [
     { value: "1:1", width: 1, height: 1 },
     { value: "2:3", width: 2, height: 3 },
@@ -33,6 +35,52 @@ export function parseAspectRatio(value: string) {
     return { width, height };
 }
 
+/** Keep the source ratio while producing an image size accepted by the image request API. */
+export function computeSourceImageSize(width: number, height: number) {
+    if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) return "auto";
+    const step = 16;
+    const minPixels = 655360;
+    const maxPixels = SMART_IMAGE_MAX_PIXELS;
+    const maxEdge = 3840;
+    const sourceLongEdge = Math.max(width, height);
+    const sourceRatio = sourceLongEdge / Math.min(width, height);
+    const sourceOrientedRatio = width / height;
+    const standardRatio = mediaRatioOptions.find((option) => option.value !== "auto" && Math.abs(option.width / option.height - sourceOrientedRatio) / sourceOrientedRatio <= 0.01);
+    const preferredScale = inferMediaScale(`${width}x${height}`);
+    let targetLongEdge = sourceLongEdge;
+    if (standardRatio) {
+        const preset = imageSizePresets[preferredScale]?.[standardRatio.value];
+        const dimensions = parsePixelSize(preset || "");
+        if (dimensions) targetLongEdge = Math.max(dimensions.width, dimensions.height);
+    }
+    const divisor = greatestCommonDivisor(Math.round(width), Math.round(height));
+    const unitWidth = (Math.round(width) / divisor) * step;
+    const unitHeight = (Math.round(height) / divisor) * step;
+    const unitPixels = unitWidth * unitHeight;
+    const minMultiplier = Math.ceil(Math.sqrt(minPixels / unitPixels));
+    const maxMultiplier = Math.min(Math.floor(maxEdge / unitWidth), Math.floor(maxEdge / unitHeight), Math.floor(Math.sqrt(maxPixels / unitPixels)));
+    if (minMultiplier <= maxMultiplier) {
+    const preferredMultiplier = Math.max(1, Math.round(targetLongEdge / Math.max(unitWidth, unitHeight)));
+        const multiplier = Math.max(minMultiplier, Math.min(maxMultiplier, preferredMultiplier));
+        return `${unitWidth * multiplier}x${unitHeight * multiplier}`;
+    }
+    const ratio = Math.min(3, sourceRatio);
+    const landscape = width >= height;
+    let longEdge = Math.min(maxEdge, Math.max(1024, targetLongEdge));
+    let shortEdge = longEdge / ratio;
+    const pixels = longEdge * shortEdge;
+    const areaScale = pixels < minPixels ? Math.sqrt(minPixels / pixels) : pixels > maxPixels ? Math.sqrt(maxPixels / pixels) : 1;
+    longEdge = Math.min(maxEdge, longEdge * areaScale);
+    shortEdge = longEdge / ratio;
+    const targetWidth = landscape ? longEdge : shortEdge;
+    const targetHeight = landscape ? shortEdge : longEdge;
+    const closest = closestGridSize(targetWidth, targetHeight, ratio, minPixels, maxPixels, maxEdge, step);
+    if (closest) return `${closest.width}x${closest.height}`;
+    const outputWidth = alignMediaDimension(targetWidth, step);
+    const outputHeight = alignMediaDimension(targetHeight, step);
+    return `${outputWidth}x${outputHeight}`;
+}
+
 export const videoRatioOptions = [
     { value: "1:1", width: 1, height: 1 },
     { value: "3:4", width: 3, height: 4 },
@@ -55,9 +103,14 @@ export function normalizeMediaScale(value: string | undefined) {
     return "1k";
 }
 
+export function isSmartImageSize(size: string | undefined) {
+    return size === SMART_IMAGE_SIZE || Boolean(size?.startsWith(`${SMART_IMAGE_SIZE}:`));
+}
+
 export function inferMediaScale(size: string, storedScale?: string) {
     if (storedScale) return normalizeMediaScale(storedScale);
     if (!size || size === "auto") return "auto";
+    if (isSmartImageSize(size)) return "auto";
     if (parseAspectRatio(size)) return "auto";
     const pixels = parsePixelSize(size);
     if (!pixels) return "auto";
@@ -71,6 +124,7 @@ export function inferMediaScale(size: string, storedScale?: string) {
 
 export function inferMediaRatio(size: string, fallback = "1:1") {
     if (!size || size === "auto") return "auto";
+    if (isSmartImageSize(size)) return SMART_IMAGE_SIZE;
     if (mediaRatioOptions.some((item) => item.value === size)) return size;
     const pixels = parsePixelSize(size) || parseAspectRatio(size);
     if (!pixels) return fallback;
@@ -86,6 +140,9 @@ export function inferMediaRatio(size: string, fallback = "1:1") {
 }
 
 export function computeMediaSize(scale: string, ratio: string) {
+    if (ratio === SMART_IMAGE_SIZE) {
+        return SMART_IMAGE_SIZE;
+    }
     if (ratio === "auto" || !ratio) return "auto";
     const normalizedScale = normalizeMediaScale(scale);
     if (normalizedScale === "auto") return ratio;
@@ -93,6 +150,7 @@ export function computeMediaSize(scale: string, ratio: string) {
 }
 
 export function readMediaDimensions(size: string, scale: string, ratio: string) {
+    if (isSmartImageSize(size) || ratio === SMART_IMAGE_SIZE) return { width: 0, height: 0 };
     const pixels = parsePixelSize(size);
     if (pixels) return pixels;
     const computed = computeMediaSize(scale === "auto" ? "1k" : scale, ratio === "auto" ? "1:1" : ratio);
@@ -148,4 +206,37 @@ export function readVideoDimensions(size: string, resolution: string, ratio: str
 
 function evenRound(value: number) {
     return Math.max(2, Math.round(value / 2) * 2);
+}
+
+function alignMediaDimension(value: number, step: number) {
+    return Math.max(step, Math.ceil(value / step) * step);
+}
+
+function greatestCommonDivisor(left: number, right: number) {
+    let a = Math.abs(left);
+    let b = Math.abs(right);
+    while (b) [a, b] = [b, a % b];
+    return a || 1;
+}
+
+function closestGridSize(targetWidth: number, targetHeight: number, sourceRatio: number, minPixels: number, maxPixels: number, maxEdge: number, step: number) {
+    const radius = step * 32;
+    const minWidth = Math.max(step, Math.floor((targetWidth - radius) / step) * step);
+    const maxWidth = Math.min(maxEdge, Math.ceil((targetWidth + radius) / step) * step);
+    const minHeight = Math.max(step, Math.floor((targetHeight - radius) / step) * step);
+    const maxHeight = Math.min(maxEdge, Math.ceil((targetHeight + radius) / step) * step);
+    const landscape = targetWidth >= targetHeight;
+    let best: { width: number; height: number; score: number } | null = null;
+    for (let width = minWidth; width <= maxWidth; width += step) {
+        for (let height = minHeight; height <= maxHeight; height += step) {
+            if ((width >= height) !== landscape) continue;
+            const pixels = width * height;
+            if (pixels < minPixels || pixels > maxPixels) continue;
+            const ratioError = Math.abs(width / height / sourceRatio - 1);
+            const areaError = Math.abs(Math.log(pixels / (targetWidth * targetHeight)));
+            const score = ratioError + areaError * 0.001;
+            if (!best || score < best.score) best = { width, height, score };
+        }
+    }
+    return best;
 }

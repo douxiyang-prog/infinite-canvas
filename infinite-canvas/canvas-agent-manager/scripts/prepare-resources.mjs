@@ -10,7 +10,7 @@ const agentRoot = path.join(projectRoot, "canvas-agent");
 const resourcesRoot = path.join(managerRoot, "resources");
 const agentStage = path.join(resourcesRoot, "agent");
 const packStage = path.join(resourcesRoot, ".pack");
-// 精简版不安装 optionalDependencies（DeepSeek Harness 与 Codex），体积和文件数大幅减少。
+// Lite installs Codex for canvas operations but omits the much larger DeepSeek Harness runtime.
 const lite = process.argv.includes("--lite");
 
 assertInside(managerRoot, resourcesRoot);
@@ -37,14 +37,47 @@ run("npm", [
     tarball,
 ], managerRoot);
 
+if (lite) {
+    const agentPackage = JSON.parse(await fs.readFile(path.join(agentRoot, "package.json"), "utf8"));
+    const codexVersion = agentPackage.optionalDependencies?.["@openai/codex"];
+    if (!codexVersion) throw new Error("Canvas Agent does not declare an optional Codex dependency");
+    run("npm", [
+        "install",
+        "--omit=dev",
+        "--omit=optional",
+        "--no-audit",
+        "--no-fund",
+        "--prefix",
+        agentStage,
+        `@openai/codex@${codexVersion}`,
+    ], managerRoot);
+    const installedCodex = JSON.parse(await fs.readFile(path.join(agentStage, "node_modules", "@openai", "codex", "package.json"), "utf8"));
+    const platformPackage = `@openai/codex-${process.platform}-${process.arch}`;
+    const platformAlias = installedCodex.optionalDependencies?.[platformPackage];
+    if (!platformAlias) throw new Error(`Codex does not provide a package for ${process.platform}-${process.arch}`);
+    run("npm", [
+        "install",
+        "--omit=dev",
+        "--omit=optional",
+        "--no-audit",
+        "--no-fund",
+        "--no-save",
+        "--prefix",
+        agentStage,
+        `${platformPackage}@${platformAlias}`,
+    ], managerRoot);
+}
+
 await fs.rm(packStage, { recursive: true, force: true });
 const installedEntry = path.join(agentStage, "node_modules", "@basketikun", "canvas-agent", "dist", "index.js");
 if (!await exists(installedEntry)) throw new Error(`Installed Agent entry not found: ${installedEntry}`);
 const dshInstalled = await exists(path.join(agentStage, "node_modules", "@deepseek-ai", "dsh-sdk-client"));
 const codexInstalled = await exists(path.join(agentStage, "node_modules", "@openai", "codex"));
-if (lite && (dshInstalled || codexInstalled)) throw new Error("Lite package must not include DeepSeek Harness or Codex");
+const codexPlatformInstalled = await exists(path.join(agentStage, "node_modules", "@openai", `codex-${process.platform}-${process.arch}`));
+if (lite && dshInstalled) throw new Error("Lite package must not include DeepSeek Harness");
+if (lite && (!codexInstalled || !codexPlatformInstalled)) throw new Error("Lite package is missing Codex or its native executable");
 if (!lite && (!dshInstalled || !codexInstalled)) throw new Error("Full package is missing DeepSeek Harness or Codex");
-console.log(`Prepared ${lite ? "lite" : "full"} Canvas Agent resources at ${agentStage}`);
+console.log(`Prepared ${lite ? "lite + Codex" : "full"} Canvas Agent resources at ${agentStage}`);
 
 function run(command, args, cwd, capture = false) {
     const result = spawnSync(command, args, {

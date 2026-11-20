@@ -62,6 +62,9 @@ function render(state) {
   const dshOption = elements.runtime.querySelector('option[value="dsh"]');
   dshOption.hidden = !state.components?.dsh;
   dshOption.disabled = !state.components?.dsh;
+  const codexOption = elements.runtime.querySelector('option[value="codex"]');
+  codexOption.hidden = !state.components?.codex;
+  codexOption.disabled = !state.components?.codex;
   elements.runtime.value = state.settings.runtime;
   elements.canvasUrl.value = state.settings.canvasUrl;
   elements.startOnLaunch.checked = state.settings.startOnLaunch;

@@ -13,6 +13,7 @@ const AGENT_PLUGIN_REMOVE_COMMAND = "codex plugin remove infinite-canvas";
 const AGENT_MCP_REMOVE_COMMAND = "codex mcp remove infinite-canvas";
 
 type DshConfig = { provider: string; model: string; hasApiKey: boolean; available?: boolean; runtime: "dsh" | "ark" | "canvas" };
+type AgentRuntimeInfo = { protocolVersion?: number; runtime: "codex" | "dsh" | "ark" | "canvas" };
 
 function absoluteChannelBaseUrl(value: string) {
     const trimmed = value.trim();
@@ -49,6 +50,7 @@ export function AgentConnectView({
     const { t } = useTranslation();
     const { message } = App.useApp();
     const [dshConfig, setDshConfig] = useState<DshConfig | null>(null);
+    const [agentRuntime, setAgentRuntime] = useState<AgentRuntimeInfo | null>(null);
     const [dshApiKey, setDshApiKey] = useState("");
     const [savingDshConfig, setSavingDshConfig] = useState(false);
     const [changingRuntime, setChangingRuntime] = useState(false);
@@ -68,6 +70,11 @@ export function AgentConnectView({
     useEffect(() => {
         if (!connected || !url.trim() || !token.trim()) return;
         let cancelled = false;
+        void fetchAgentJson<{ ok?: boolean } & AgentRuntimeInfo>(url.trim().replace(/\/$/, ""), token.trim(), "/config")
+            .then((data) => {
+                if (!cancelled && data.runtime) setAgentRuntime(data);
+            })
+            .catch(() => undefined);
         void fetchAgentJson<{ ok?: boolean } & DshConfig>(url.trim().replace(/\/$/, ""), token.trim(), "/agent/dsh/config")
             .then((data) => {
                 if (!cancelled && data.provider) setDshConfig(data);
@@ -347,6 +354,24 @@ export function AgentConnectView({
                                 </Button>
                             </div>
                         )}
+                    </div>
+                ) : null}
+                {agentRuntime?.runtime === "codex" ? (
+                    <div className="rounded-lg border p-3" style={{ borderColor: theme.node.stroke }}>
+                        <div className="flex items-start justify-between gap-3">
+                            <div>
+                                <div className="text-sm font-medium leading-5">{t("agent.connect.dshCodex")}</div>
+                                <div className="mt-1 text-xs leading-5" style={{ color: theme.node.muted }}>
+                                    {t("agent.connect.dshCodexText")}
+                                </div>
+                            </div>
+                            <span className="shrink-0 text-[11px]" style={{ color: "#16a34a" }}>
+                                {t("agent.connect.dshCodexActive")}
+                            </span>
+                        </div>
+                        <div className="mt-2 text-[11px] leading-5" style={{ color: theme.node.muted }}>
+                            {t("agent.connect.dshCodexManagerHint")}
+                        </div>
                     </div>
                 ) : null}
                 <div className="rounded-lg border p-3" style={{ borderColor: theme.node.stroke }}>

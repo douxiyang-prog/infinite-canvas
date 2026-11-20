@@ -7,7 +7,7 @@ import type { Readable } from "node:stream";
 
 import { app, BrowserWindow, clipboard, ipcMain, Menu, nativeImage, shell, Tray } from "electron";
 
-type AgentRuntime = "canvas" | "dsh" | "ark";
+type AgentRuntime = "canvas" | "codex" | "dsh" | "ark";
 type AgentStatus = "stopped" | "starting" | "running" | "stopping" | "error";
 type AgentChild = ChildProcessByStdio<null, Readable, Readable>;
 
@@ -39,7 +39,7 @@ type ManagerState = {
     logs: string[];
     lastError: string;
     electronNodeVersion: string;
-    components: { dsh: boolean };
+    components: { codex: boolean; dsh: boolean };
 };
 
 const DEFAULT_SETTINGS: ManagerSettings = {
@@ -72,7 +72,7 @@ function loadSettings(): ManagerSettings {
         const stored = JSON.parse(fs.readFileSync(settingsFile(), "utf8")) as Partial<ManagerSettings>;
         return {
             port: validPort(stored.port) ? Number(stored.port) : DEFAULT_SETTINGS.port,
-            runtime: validRuntime(stored.runtime) && (stored.runtime !== "dsh" || dshAvailable()) ? stored.runtime : DEFAULT_SETTINGS.runtime,
+            runtime: validRuntime(stored.runtime) && (stored.runtime !== "dsh" || dshAvailable()) && (stored.runtime !== "codex" || codexAvailable()) ? stored.runtime : DEFAULT_SETTINGS.runtime,
             canvasUrl: typeof stored.canvasUrl === "string" ? stored.canvasUrl : DEFAULT_SETTINGS.canvasUrl,
             startOnLaunch: stored.startOnLaunch !== false,
             autoRestart: stored.autoRestart !== false,
@@ -94,7 +94,7 @@ function validPort(value: unknown) {
 }
 
 function validRuntime(value: unknown): value is AgentRuntime {
-    return value === "canvas" || value === "dsh" || value === "ark";
+    return value === "canvas" || value === "codex" || value === "dsh" || value === "ark";
 }
 
 function normalizeSettings(value: unknown): ManagerSettings {
@@ -103,6 +103,7 @@ function normalizeSettings(value: unknown): ManagerSettings {
     if (!validPort(port)) throw new Error("端口必须在 1024 到 65535 之间");
     if (!validRuntime(input.runtime)) throw new Error("Agent 后端无效");
     if (input.runtime === "dsh" && !dshAvailable()) throw new Error("当前安装包不包含 DeepSeek Harness，请安装完整版");
+    if (input.runtime === "codex" && !codexAvailable()) throw new Error("当前安装包不包含 Codex，请安装完整版 Canvas Agent Manager");
     const canvasUrl = String(input.canvasUrl || "").trim();
     if (canvasUrl) {
         let parsed: URL;
@@ -160,7 +161,7 @@ function snapshot(): ManagerState {
         logs: [...logs],
         lastError,
         electronNodeVersion: process.versions.node,
-        components: { dsh: dshAvailable() },
+        components: { codex: codexAvailable(), dsh: dshAvailable() },
     };
 }
 
@@ -218,6 +219,13 @@ function dshAvailable() {
     const root = agentWorkingDirectory();
     return [path.join(root, "node_modules"), path.resolve(root, "..", "..")]
         .some((dir) => fs.existsSync(path.join(dir, "@deepseek-ai", "dsh-sdk-client")));
+}
+
+/** Codex 和 DSH 一样属于完整版可选组件。 */
+function codexAvailable() {
+    const root = agentWorkingDirectory();
+    return [path.join(root, "node_modules"), path.resolve(root, "..", "..")]
+        .some((dir) => fs.existsSync(path.join(dir, "@openai", "codex", "package.json")));
 }
 
 function startAgent() {

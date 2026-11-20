@@ -1,4 +1,5 @@
 import { spawn, type ChildProcess } from "node:child_process";
+import { existsSync } from "node:fs";
 import { createRequire } from "node:module";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -67,8 +68,9 @@ export class CodexAppClient {
 
     /** 启动并初始化 Codex app-server。 */
     static async start(emit: AgentEmit, onExit: () => void) {
-        logger.info("Starting Codex app-server", { executable: process.execPath, codex: codexBin() });
-        const child = spawn(process.execPath, [codexBin(), "app-server", "--stdio"], { stdio: ["pipe", "pipe", "pipe"], windowsHide: true });
+        const launch = codexLaunchCommand();
+        logger.info("Starting Codex app-server", { executable: launch.command, args: launch.args });
+        const child = spawn(launch.command, launch.args, { stdio: ["pipe", "pipe", "pipe"], windowsHide: true, env: launch.env });
         const client = new CodexAppClient(child, emit);
         let stopped = false;
         const stop = () => {
@@ -779,12 +781,13 @@ function canvasAgentMcpCommand() {
     const current = process.argv.find((arg) => /index\.(t|j)s$/.test(arg)) || "";
     const entry = path.resolve(current || fileURLToPath(new URL("../index.js", import.meta.url)));
     const tsx = path.join(path.dirname(entry), "..", "node_modules", "tsx", "dist", "cli.mjs");
-    return entry.endsWith(".ts") ? { command: process.execPath, args: [tsx, entry, "mcp"] } : { command: process.execPath, args: [entry, "mcp"] };
+    const command = entry.endsWith(".ts") ? { command: process.execPath, args: [tsx, entry, "mcp"] } : { command: process.execPath, args: [entry, "mcp"] };
+    return process.versions.electron ? { ...command, env: { ELECTRON_RUN_AS_NODE: "1" } } : command;
 }
 
 /** 生成 Codex app-server 使用的 MCP 配置。 */
 function codexConfig(permissionMode: AgentPermissionMode) {
-    return { model_reasoning_summary: "auto", ...(permissionMode === "automatic" ? { approvals_reviewer: "auto_review" } : {}), mcp_servers: { "infinite-canvas": { command: canvasAgentMcp.command, args: canvasAgentMcp.args, default_tools_approval_mode: "approve", startup_timeout_sec: 20, tool_timeout_sec: 90 } } };
+    return { model_reasoning_summary: "auto", ...(permissionMode === "automatic" ? { approvals_reviewer: "auto_review" } : {}), mcp_servers: { "infinite-canvas": { command: canvasAgentMcp.command, args: canvasAgentMcp.args, ...("env" in canvasAgentMcp ? { env: canvasAgentMcp.env } : {}), default_tools_approval_mode: "approve", startup_timeout_sec: 20, tool_timeout_sec: 90 } } };
 }
 
 function threadSettings(permissionMode: AgentPermissionMode) {
@@ -901,4 +904,28 @@ function codexBin() {
     } catch {
         throw new Error("当前安装包不包含 Codex 组件，请切换到其他后端，或安装完整版 Canvas Agent Manager");
     }
+}
+
+/** Windows 直接启动原生 Codex，避免 npm 包装脚本创建空白控制台窗口。 */
+function codexLaunchCommand() {
+    const bin = codexBin();
+    const packageRoot = path.resolve(path.dirname(bin), "..");
+    const fallback = { command: process.execPath, args: [bin, "app-server", "--stdio"], env: process.env };
+    if (process.platform !== "win32") return fallback;
+    const arch = process.arch === "arm64" ? "arm64" : "x64";
+    const target = arch === "arm64" ? "aarch64-pc-windows-msvc" : "x86_64-pc-windows-msvc";
+    try {
+        const platformRoot = path.dirname(require.resolve(`@openai/codex-win32-${arch}/package.json`));
+        const executable = path.join(platformRoot, "vendor", target, "bin", "codex.exe");
+        if (existsSync(executable)) {
+            return {
+                command: executable,
+                args: ["app-server", "--stdio"],
+                env: { ...process.env, CODEX_MANAGED_PACKAGE_ROOT: packageRoot, CODEX_MANAGED_BY_NPM: "1" },
+            };
+        }
+    } catch {
+        // Fall back to the package entry point for local/non-bundled installations.
+    }
+    return fallback;
 }

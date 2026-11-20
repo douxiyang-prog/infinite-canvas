@@ -6,7 +6,7 @@ import express, { type NextFunction, type Request, type Response } from "express
 import { runClaudeTurn } from "../agent/claude.js";
 import { interruptArkNativeTurn, runArkNativeTurn } from "../agent/ark-native.js";
 import { canvasChannelModels, interruptCanvasChannelTurn, publicChannelConfig, runCanvasChannelTurn, setCanvasChannelConfig } from "../agent/canvas-channel.js";
-import { archiveCodexThread, CodexSkillLookupError, configureCodexSkill, generateCodexSkillDraft, interruptCodexTurn, isRecoverableThreadError, listCodexModels, listCodexSkills, listCodexThreads, readCodexThread, resolveCodexApproval, resolveCodexSkill, resumeCodexThread, runCodexTurn, startCodexThread, summarizeCodexThread } from "../agent/codex.js";
+import { archiveCodexThread, CodexSkillLookupError, configureCodexSkill, generateCodexSkillDraft, interruptCodexTurn, isCodexThreadId, isRecoverableThreadError, listCodexModels, listCodexSkills, listCodexThreads, readCodexThread, resolveCodexApproval, resolveCodexSkill, resumeCodexThread, runCodexTurn, startCodexThread, summarizeCodexThread } from "../agent/codex.js";
 import type { CodexReasoningEffort, CodexSkillSelector } from "../agent/codex-protocol.js";
 import { closeDshRuntime, createDshSession, deleteDshSession, dshInstalled, dshModels, dshRuntimeInfo, dshSessions, interruptDshTurn, listDshThreads, readDshSession, runDshTurn } from "../agent/deepseek.js";
 import { messageMetadataStore } from "../agent/message-metadata.js";
@@ -36,6 +36,11 @@ export function startHttpServer() {
     saveConfig(config);
 
     const initialWorkspace = ensureSiteWorkspace(config);
+    if (agentRuntime === "codex" && initialWorkspace.activeThreadId && !isCodexThreadId(initialWorkspace.activeThreadId)) {
+        logger.warn("Clearing incompatible active thread for Codex", { threadId: initialWorkspace.activeThreadId });
+        updateSiteWorkspace(config, { activeThreadId: undefined });
+        initialWorkspace.activeThreadId = undefined;
+    }
     const session = new CanvasSession(initialWorkspace.activeThreadId || "");
     const skillStore = new SkillStore(initialWorkspace.workspacePath);
     /** 将 Agent 事件广播到所属线程或全部网页。 */
@@ -456,6 +461,7 @@ export function startHttpServer() {
     app.get("/agent/codex/threads/:threadId", route(async (req, res) => {
         const workspace = ensureSiteWorkspace(config);
         const threadId = routeParam(req.params.threadId);
+        if (!isCodexThreadId(threadId)) return res.status(400).json({ ok: false, code: "CONVERSATION_STALE", error: "该会话不属于 Codex，请新建或从历史记录选择 Codex 对话" });
         res.json({ ok: true, workspace, conversation: session.conversationStateSnapshot, ...(await readCodexThread(emit, threadId, workspace.workspacePath)) });
     }));
     app.post("/agent/codex/history/ack", (req, res) => {
@@ -467,6 +473,7 @@ export function startHttpServer() {
     app.post("/agent/codex/threads/:threadId/resume", codexMutation(async (req, res) => {
         const threadId = routeParam(req.params.threadId);
         const clientId = String(req.body?.clientId || "");
+        if (!isCodexThreadId(threadId)) return res.status(400).json({ ok: false, code: "CONVERSATION_STALE", error: "该会话不属于 Codex，请新建或从历史记录选择 Codex 对话" });
         try {
             const result = await prepareExistingThread(threadId, clientId, permissionMode(req.body?.permissionMode));
             const nextWorkspace = setActiveThread(threadId, { sourceClientId: clientId }, true);
@@ -479,6 +486,7 @@ export function startHttpServer() {
     app.post("/agent/codex/threads/:threadId/delete", codexMutation(async (req, res) => {
         const workspace = ensureSiteWorkspace(config);
         const threadId = routeParam(req.params.threadId);
+        if (!isCodexThreadId(threadId)) return res.status(400).json({ ok: false, code: "CONVERSATION_STALE", error: "该会话不属于 Codex，请新建或从历史记录选择 Codex 对话" });
         await archiveCodexThread(emit, threadId, workspace.workspacePath);
         const nextWorkspace = setActiveThread(workspace.activeThreadId === threadId ? "" : workspace.activeThreadId || "", { sourceClientId: String(req.body?.clientId || "") });
         res.json({ ok: true, workspace: nextWorkspace, conversation: session.conversationStateSnapshot });

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { ArrowUp, LoaderCircle, Maximize2, Square } from "lucide-react";
+import { ArrowUp, LoaderCircle, Maximize2 } from "lucide-react";
 import { Button, Modal, Tooltip } from "antd";
 import { useTranslation } from "react-i18next";
 
@@ -112,7 +112,7 @@ export function CanvasNodePromptPanel({
             />
 
             <div className="mt-2 flex min-w-0 flex-wrap items-center justify-between gap-2">
-                <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
+                <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1.5">
                     <Tooltip title={t("canvas.promptPanel.expandEditor")}>
                         <Button
                             type="text"
@@ -138,8 +138,8 @@ export function CanvasNodePromptPanel({
                         </>
                     ) : mode === "video" ? (
                         <>
-                            <ModelPicker config={config} value={config.model} onChange={(model) => onConfigChange(node.id, { model })} capability="video" onMissingConfig={() => openConfigDialog(true)} className="max-w-[190px]" />
-                            <CanvasVideoSettingsPopover config={config} buttonClassName="!h-10 !max-w-[220px] !justify-start !rounded-full !px-3" onConfigChange={(key, value) => onConfigChange(node.id, videoConfigPatch(key, value))} />
+                            <ModelPicker config={config} value={config.model} onChange={(model) => onConfigChange(node.id, { model })} capability="video" onMissingConfig={() => openConfigDialog(true)} className="max-w-[188px]" />
+                            <CanvasVideoSettingsPopover config={config} buttonClassName="!h-10 !max-w-[194px] !justify-start !rounded-full !px-3" onConfigChange={(key, value) => onConfigChange(node.id, videoConfigPatch(key, value))} />
                         </>
                     ) : mode === "audio" ? (
                         <>
@@ -178,17 +178,16 @@ export function CanvasNodePromptPanel({
                     />
                     <Button
                         type="primary"
-                        className="!h-10 !min-w-16 shrink-0 !rounded-full !px-3"
+                        className="!h-10 !w-16 !min-w-16 shrink-0 !rounded-full !px-2"
                         danger={isRunning}
                         disabled={!isRunning && !prompt.trim()}
                         onClick={() => (isRunning ? onStop(node.id) : submit())}
                         aria-label={t(isRunning ? "canvas.promptPanel.stopGeneration" : "canvas.promptPanel.generate")}
                     >
-                        <span className="flex items-center gap-1.5">
+                        <span className="flex items-center gap-1">
                             {isRunning ? (
                                 <>
                                     <LoaderCircle className="size-4 animate-spin" />
-                                    <Square className="size-3.5 fill-current" />
                                     <span className="text-xs font-medium">{t("canvas.promptPanel.stop")}</span>
                                 </>
                             ) : (

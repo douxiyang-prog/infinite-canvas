@@ -1,6 +1,6 @@
 {
   "name": "@basketikun/canvas-agent",
-  "version": "0.6.0",
+  "version": "0.6.1",
   "license": "MIT",
   "type": "module",
   "main": "./dist/index.js",
@@ -34,7 +34,7 @@
   "optionalDependencies": {
     "@deepseek-ai/dsh-llm": "0.2.2-rc.1",
     "@deepseek-ai/dsh-sdk-client": "0.2.2-rc.1",
-    "@openai/codex": "0.146.0"
+    "@openai/codex": "^0.171.0"
   },
   "devDependencies": {
     "@types/express": "^5.0.0",

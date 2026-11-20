@@ -17,6 +17,7 @@ type CodexRunOptions = { threadId?: string; cwd?: string; permissionMode?: Agent
 type CodexSkillDraftInput = { model?: string; effort?: CodexReasoningEffort } & ({ source: "conversation"; threadId: string } | { source: "canvas"; snapshot: CanvasSnapshot });
 
 const skillNamePattern = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+const codexThreadIdPattern = /^(?:urn:uuid:)?[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const skillDraftSchema = z.object({
     name: z.string().trim().min(1).max(64).regex(skillNamePattern),
     displayName: z.string().trim().max(64),
@@ -94,6 +95,7 @@ export async function startCodexThread(emit: AgentEmit, cwd?: string, permission
 
 /** 恢复指定 Codex 线程并返回聊天历史。 */
 export async function resumeCodexThread(emit: AgentEmit, threadId: string, cwd?: string, permissionMode: AgentPermissionMode = "request", preheat = false) {
+    assertCodexThreadId(threadId);
     const app = await getCodexApp(emit);
     const thread = await resumeLoadedThread(app, threadId, cwd, permissionMode, true, preheat);
     const history = await loadCodexHistory(emit, threadId, cwd);
@@ -149,6 +151,7 @@ export async function configureCodexSkill(emit: AgentEmit, cwd: string, selector
 
 /** 读取指定 Codex 线程及其聊天历史。 */
 export async function readCodexThread(emit: AgentEmit, threadId: string, cwd?: string) {
+    assertCodexThreadId(threadId);
     const app = await getCodexApp(emit);
     const history = await loadCodexHistory(emit, threadId, cwd);
     const supplementalItems = await codexEventHistory.readThread(threadId);
@@ -158,6 +161,7 @@ export async function readCodexThread(emit: AgentEmit, threadId: string, cwd?: s
 
 /** 归档指定 Codex 线程。 */
 export async function archiveCodexThread(emit: AgentEmit, threadId: string, cwd?: string) {
+    assertCodexThreadId(threadId);
     const app = await getCodexApp(emit);
     try {
         await loadCodexThread(emit, threadId, cwd, false);
@@ -183,7 +187,15 @@ async function mergeMessageMetadata<T extends { role: string; threadId: string; 
 
 /** 判断线程异常是否允许自动新建线程后重试。 */
 export function isRecoverableThreadError(error: unknown) {
-    return /thread not loaded|no rollout found/i.test(errorMessage(error));
+    return /thread not loaded|no rollout found|invalid (?:session|thread) id/i.test(errorMessage(error));
+}
+
+export function isCodexThreadId(threadId: string) {
+    return codexThreadIdPattern.test(threadId);
+}
+
+function assertCodexThreadId(threadId: string) {
+    if (!isCodexThreadId(threadId)) throw new Error(`invalid thread id: expected a Codex thread UUID, received "${threadId}"`);
 }
 
 /** 执行一次 Codex turn，并负责附件临时文件和线程恢复。 */
