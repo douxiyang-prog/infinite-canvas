@@ -1,13 +1,15 @@
 import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
-import { Button, Modal, Segmented, Switch, Tooltip } from "antd";
-import { ArrowUp, Box, Info, RotateCcw, SunMedium, Thermometer } from "lucide-react";
+import { App, Button, Input, Modal, Segmented, Switch, Tooltip } from "antd";
+import { Box, Check, Info, RotateCcw, SunMedium, Thermometer } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 import { canvasThemes } from "@/lib/canvas-theme";
+import { buildRelightPrompt } from "@/lib/canvas/canvas-generation-helpers";
 import { useThemeStore } from "@/stores/use-theme-store";
 import type { AiConfig } from "@/stores/use-config-store";
 import type { CanvasImageRelightParams } from "@/types/canvas";
-import { NewApiGenerationCost } from "./new-api-generation-cost";
+import { createPromptPreset, type LightingPromptPreset } from "@/services/api/prompt-presets";
+import { usePromptPresetStore } from "@/stores/use-prompt-preset-store";
 
 export const defaultRelightParams: CanvasImageRelightParams = {
     lightX: 0.44,
@@ -28,18 +30,9 @@ const lightPositions = [
     { id: "back", x: 0, y: 0, z: -1 },
 ] as const;
 
-const relightPresets: Array<{ id: string; params: Partial<CanvasImageRelightParams> }> = [
-    { id: "morning", params: { lightX: 0.65, lightY: 0.14, lightZ: 0.75, brightness: 58, temperature: 4300, softness: 55, rimLight: false } },
-    { id: "noon", params: { lightX: 0.08, lightY: 0.92, lightZ: 0.38, brightness: 78, temperature: 5900, softness: 24, rimLight: false } },
-    { id: "sunset", params: { lightX: 0.68, lightY: -0.05, lightZ: 0.73, brightness: 55, temperature: 3200, softness: 42, rimLight: true } },
-    { id: "backlight", params: { lightX: 0.18, lightY: 0.08, lightZ: -0.98, brightness: 48, temperature: 4600, softness: 68, rimLight: true } },
-    { id: "overcast", params: { lightX: 0.05, lightY: 0.56, lightZ: 0.82, brightness: 64, temperature: 6500, softness: 88, rimLight: false } },
-    { id: "studio", params: { lightX: -0.42, lightY: 0.34, lightZ: 0.84, brightness: 62, temperature: 5600, softness: 76, rimLight: false } },
-];
-
 export function CanvasNodeRelightDialog({
     dataUrl,
-    config,
+    config: _config,
     initialParams,
     open,
     onClose,
@@ -50,24 +43,37 @@ export function CanvasNodeRelightDialog({
     initialParams?: CanvasImageRelightParams;
     open: boolean;
     onClose: () => void;
-    onConfirm: (params: CanvasImageRelightParams) => void;
+    onConfirm: (params: CanvasImageRelightParams, prompt: string, presetId?: string) => void;
 }) {
     const { t } = useTranslation();
+    const { message } = App.useApp();
     const theme = canvasThemes[useThemeStore((state) => state.theme)];
+    const presets = usePromptPresetStore((state) => state.presets).filter((preset) => preset.category === "lighting" && preset.enabled) as LightingPromptPreset[];
+    const savePreset = usePromptPresetStore((state) => state.savePreset);
     const [params, setParams] = useState(defaultRelightParams);
     const [view, setView] = useState<"perspective" | "front">("perspective");
+    const [activePresetId, setActivePresetId] = useState("");
+    const [presetName, setPresetName] = useState("");
+    const [savingPreset, setSavingPreset] = useState(false);
     const draggingRef = useRef(false);
 
     useEffect(() => {
         if (!open) return;
         setParams(normalizeRelightParams(initialParams || defaultRelightParams));
         setView("perspective");
+        setActivePresetId("");
+        setSavingPreset(false);
+        setPresetName("");
     }, [dataUrl, initialParams, open]);
 
-    const update = <Key extends keyof CanvasImageRelightParams>(key: Key, value: CanvasImageRelightParams[Key]) => setParams((current) => ({ ...current, [key]: value }));
+    const update = <Key extends keyof CanvasImageRelightParams>(key: Key, value: CanvasImageRelightParams[Key]) => {
+        setActivePresetId("");
+        setParams((current) => ({ ...current, [key]: value }));
+    };
 
     const updateFromPointer = (event: ReactPointerEvent<HTMLDivElement>) => {
         if (!draggingRef.current) return;
+        setActivePresetId("");
         const rect = event.currentTarget.getBoundingClientRect();
         const rawX = ((event.clientX - rect.left) / rect.width) * 2 - 1;
         const rawY = 1 - ((event.clientY - rect.top) / rect.height) * 2;
@@ -83,10 +89,12 @@ export function CanvasNodeRelightDialog({
     };
 
     const updateVector = (key: "lightX" | "lightY" | "lightZ", value: number) => {
+        setActivePresetId("");
         setParams((current) => normalizeRelightParams({ ...current, [key]: value }));
     };
 
     const setDirection = (axis: "horizontal" | "vertical" | "depth", value: string) => {
+        setActivePresetId("");
         setParams((current) => {
             const next = { ...current };
             if (axis === "horizontal") next.lightX = value === "left" ? -0.65 : value === "right" ? 0.65 : 0;
@@ -99,7 +107,10 @@ export function CanvasNodeRelightDialog({
         });
     };
 
-    const applyPreset = (preset: Partial<CanvasImageRelightParams>) => setParams(normalizeRelightParams({ ...defaultRelightParams, ...preset }));
+    const applyPreset = (preset: (typeof presets)[number]) => {
+        setParams(normalizeRelightParams(preset.params));
+        setActivePresetId(preset.id);
+    };
 
     const startDragging = (event: ReactPointerEvent<HTMLDivElement>) => {
         draggingRef.current = true;
@@ -262,7 +273,15 @@ export function CanvasNodeRelightDialog({
                             <span className="text-center text-[11px] tabular-nums opacity-55" aria-live="polite">
                                 X {formatAxis(params.lightX)} · Y {formatAxis(params.lightY)} · Z {formatAxis(params.lightZ)}
                             </span>
-                            <Button size="small" type="text" icon={<RotateCcw className="size-4" />} onClick={() => setParams(defaultRelightParams)}>
+                            <Button
+                                size="small"
+                                type="text"
+                                icon={<RotateCcw className="size-4" />}
+                                onClick={() => {
+                                    setParams(defaultRelightParams);
+                                    setActivePresetId("");
+                                }}
+                            >
                                 {t("canvas.editors.reset")}
                             </Button>
                         </div>
@@ -273,9 +292,9 @@ export function CanvasNodeRelightDialog({
                             <section className="space-y-2">
                                 <h3 className="text-sm font-semibold">{t("canvas.editors.relightPresets")}</h3>
                                 <div className="grid grid-cols-3 gap-2">
-                                    {relightPresets.map((preset) => (
-                                        <Button key={preset.id} size="small" onClick={() => applyPreset(preset.params)}>
-                                            {t(`canvas.editors.relightPreset_${preset.id}`)}
+                                    {presets.map((preset) => (
+                                        <Button key={preset.id} size="small" onClick={() => applyPreset(preset)}>
+                                            {preset.name}
                                         </Button>
                                     ))}
                                 </div>
@@ -358,11 +377,43 @@ export function CanvasNodeRelightDialog({
                             </details>
                         </div>
 
-                        <div className="mt-5 flex items-center justify-between gap-3 border-t pt-4" style={{ borderColor: theme.node.stroke }}>
-                            <span className="text-xs opacity-45">{t("canvas.editors.relightDragHint")}</span>
-                            <div className="flex items-center gap-2">
-                                <NewApiGenerationCost config={config} mode="image" count={1} />
-                                <Button type="primary" shape="circle" size="large" icon={<ArrowUp className="size-5" />} onClick={() => onConfirm(params)} aria-label={t("canvas.editors.relightGenerate")} />
+                        <div className="mt-5 space-y-3 border-t pt-4" style={{ borderColor: theme.node.stroke }}>
+                            {savingPreset ? (
+                                <div className="flex gap-2">
+                                    <Input size="small" value={presetName} onChange={(event) => setPresetName(event.target.value)} placeholder="输入光照预设名称" />
+                                    <Button
+                                        size="small"
+                                        onClick={() => {
+                                            if (!presetName.trim()) return;
+                                            const preset = createPromptPreset({ category: "lighting", name: presetName, params, prompt: buildRelightPrompt(params), builtIn: false });
+                                            savePreset(preset);
+                                            setActivePresetId(preset.id);
+                                            setPresetName("");
+                                            setSavingPreset(false);
+                                            message.success("光照预设已保存到全局配置");
+                                        }}
+                                    >
+                                        保存
+                                    </Button>
+                                </div>
+                            ) : null}
+                            <div className="flex items-center justify-between gap-3">
+                                <span className="text-xs opacity-45">{t("canvas.editors.relightDragHint")}</span>
+                                <div className="flex items-center gap-2">
+                                    <Button size="small" onClick={() => setSavingPreset((current) => !current)}>
+                                        保存为预设
+                                    </Button>
+                                    <Button
+                                        type="primary"
+                                        icon={<Check className="size-4" />}
+                                        onClick={() => {
+                                            const preset = presets.find((item) => item.id === activePresetId);
+                                            onConfirm(params, preset?.prompt || buildRelightPrompt(params), preset?.id);
+                                        }}
+                                    >
+                                        应用光照
+                                    </Button>
+                                </div>
                             </div>
                         </div>
                     </section>

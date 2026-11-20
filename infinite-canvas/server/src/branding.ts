@@ -7,6 +7,8 @@ export const MAX_LOGO_BYTES = 2 * 1024 * 1024;
 
 type BrandingRow = RowDataPacket & {
   company_name: string;
+  dark_logo_mime: string | null;
+  dark_logo_updated_at: Date | string | null;
   login_background: string | null;
   login_logo_offset_x: number | null;
   login_logo_offset_y: number | null;
@@ -15,12 +17,15 @@ type BrandingRow = RowDataPacket & {
 };
 
 type LogoRow = RowDataPacket & {
+  dark_logo_data: Buffer | null;
+  dark_logo_mime: string | null;
   logo_data: Buffer | null;
   logo_mime: string | null;
 };
 
 export type BrandingInfo = {
   companyName: string | null;
+  darkLogoUrl: string | null;
   loginBackground: "original" | "nebula";
   loginLogoOffsetX: number;
   loginLogoOffsetY: number;
@@ -38,12 +43,17 @@ function dateIso(value: Date | string | null) {
 
 export async function getBranding(): Promise<BrandingInfo> {
   const [rows] = await db.query<BrandingRow[]>(
-    "SELECT company_name, login_background, login_logo_offset_x, login_logo_offset_y, logo_mime, logo_updated_at FROM app_settings WHERE id = 1",
+    "SELECT company_name, dark_logo_mime, dark_logo_updated_at, login_background, login_logo_offset_x, login_logo_offset_y, logo_mime, logo_updated_at FROM app_settings WHERE id = 1",
   );
   const row = rows[0];
   const updatedAt = dateIso(row?.logo_updated_at ?? null);
+  const darkUpdatedAt = dateIso(row?.dark_logo_updated_at ?? null);
   return {
     companyName: row?.company_name || null,
+    darkLogoUrl:
+      row?.dark_logo_mime && darkUpdatedAt
+        ? `/api/branding/logo-dark?v=${encodeURIComponent(darkUpdatedAt)}`
+        : null,
     loginBackground:
       row?.login_background === "nebula" ? "nebula" : "original",
     loginLogoOffsetX: Number(row?.login_logo_offset_x ?? 0),
@@ -90,27 +100,36 @@ export async function updateLoginLogoOffset(
   return getBranding();
 }
 
-export async function updateLogo(data: Uint8Array, mime: string) {
+export async function updateLogo(
+  data: Uint8Array,
+  mime: string,
+  dark = false,
+) {
+  const columns = dark
+    ? ["dark_logo_data", "dark_logo_mime", "dark_logo_updated_at"]
+    : ["logo_data", "logo_mime", "logo_updated_at"];
   await db.execute(
-    `INSERT INTO app_settings (id, logo_data, logo_mime, logo_updated_at)
+    `INSERT INTO app_settings (id, ${columns[0]}, ${columns[1]}, ${columns[2]})
      VALUES (1, ?, ?, CURRENT_TIMESTAMP(3))
      ON DUPLICATE KEY UPDATE
-       logo_data = VALUES(logo_data),
-       logo_mime = VALUES(logo_mime),
-       logo_updated_at = CURRENT_TIMESTAMP(3)`,
+       ${columns[0]} = VALUES(${columns[0]}),
+       ${columns[1]} = VALUES(${columns[1]}),
+       ${columns[2]} = CURRENT_TIMESTAMP(3)`,
     [data, mime],
   );
   return getBranding();
 }
 
-export async function getLogo() {
+export async function getLogo(dark = false) {
   const [rows] = await db.query<LogoRow[]>(
-    "SELECT logo_data, logo_mime FROM app_settings WHERE id = 1",
+    "SELECT dark_logo_data, dark_logo_mime, logo_data, logo_mime FROM app_settings WHERE id = 1",
   );
   const row = rows[0];
-  if (!row?.logo_data || !row.logo_mime)
+  const data = dark ? row?.dark_logo_data : row?.logo_data;
+  const mime = dark ? row?.dark_logo_mime : row?.logo_mime;
+  if (!data || !mime)
     throw new HttpError(404, "尚未设置 Logo");
-  return { data: row.logo_data, mime: row.logo_mime };
+  return { data, mime };
 }
 
 export function detectLogoMime(data: Uint8Array) {

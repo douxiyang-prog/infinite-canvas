@@ -138,6 +138,7 @@ async function handleApi(request: Request, url: URL) {
           config: body.config,
           webdav: body.webdav,
           promptSources: body.promptSources,
+          promptPresets: body.promptPresets,
         },
         user.id,
       ),
@@ -301,6 +302,20 @@ async function handleApi(request: Request, url: URL) {
 
   if (request.method === "GET" && url.pathname === "/api/branding/logo") {
     const logo = await getLogo();
+    return new Response(Uint8Array.from(logo.data), {
+      headers: {
+        "Content-Type": logo.mime,
+        "Cache-Control": "public, max-age=31536000, immutable",
+        "X-Content-Type-Options": "nosniff",
+      },
+    });
+  }
+
+  if (
+    request.method === "GET" &&
+    url.pathname === "/api/branding/logo-dark"
+  ) {
+    const logo = await getLogo(true);
     return new Response(Uint8Array.from(logo.data), {
       headers: {
         "Content-Type": logo.mime,
@@ -524,7 +539,11 @@ async function handleApi(request: Request, url: URL) {
     return json(await updateCompanyName(companyName));
   }
 
-  if (request.method === "PUT" && url.pathname === "/api/admin/branding/logo") {
+  if (
+    request.method === "PUT" &&
+    (url.pathname === "/api/admin/branding/logo" ||
+      url.pathname === "/api/admin/branding/logo-dark")
+  ) {
     await requireAdmin(request);
     const data = new Uint8Array(await request.arrayBuffer());
     if (!data.length) throw new HttpError(400, "请选择 Logo 图片");
@@ -532,7 +551,9 @@ async function handleApi(request: Request, url: URL) {
       throw new HttpError(413, "Logo 图片不能超过 2 MB");
     const mime = detectLogoMime(data);
     if (!mime) throw new HttpError(415, "Logo 仅支持 PNG、JPEG 或 WebP");
-    return json(await updateLogo(data, mime));
+    return json(
+      await updateLogo(data, mime, url.pathname.endsWith("/logo-dark")),
+    );
   }
 
   if (

@@ -12,9 +12,11 @@ import {
     updateLoginBackground,
     updateLoginLogoOffset,
     uploadBrandingLogo,
+    type BrandingLogoVariant,
     type LoginBackgroundMode,
 } from "@/services/api/branding";
 import { useBrandingStore } from "@/stores/use-branding-store";
+import { cn } from "@/lib/utils";
 
 type BrandingValues = {
     companyName: string;
@@ -24,10 +26,16 @@ function clampLogoOffset(value: number) {
     return Math.min(LOGIN_LOGO_OFFSET_LIMIT, Math.max(-LOGIN_LOGO_OFFSET_LIMIT, Math.round(value)));
 }
 
+function isDefaultLogo(url: string) {
+    return url === "/logo.svg" || url === "/brand/logo.svg";
+}
+
 export function BrandingSettings() {
     const { message } = App.useApp();
     const [form] = Form.useForm<BrandingValues>();
     const companyName = useBrandingStore((state) => state.companyName);
+    const darkLogoUrl = useBrandingStore((state) => state.darkLogoUrl);
+    const logoUrl = useBrandingStore((state) => state.logoUrl);
     const loginBackground = useBrandingStore((state) => state.loginBackground);
     const loginLogoOffsetX = useBrandingStore((state) => state.loginLogoOffsetX);
     const loginLogoOffsetY = useBrandingStore((state) => state.loginLogoOffsetY);
@@ -35,7 +43,7 @@ export function BrandingSettings() {
     const [savingName, setSavingName] = useState(false);
     const [savingBackground, setSavingBackground] = useState(false);
     const [savingLogoOffset, setSavingLogoOffset] = useState(false);
-    const [uploadingLogo, setUploadingLogo] = useState(false);
+    const [uploadingLogo, setUploadingLogo] = useState<BrandingLogoVariant | null>(null);
     const [logoOffsetX, setLogoOffsetX] = useState(loginLogoOffsetX);
     const [logoOffsetY, setLogoOffsetY] = useState(loginLogoOffsetY);
 
@@ -60,7 +68,7 @@ export function BrandingSettings() {
         }
     };
 
-    const beforeUpload: UploadProps["beforeUpload"] = async (file) => {
+    const logoUploadHandler = (variant: BrandingLogoVariant): UploadProps["beforeUpload"] => async (file) => {
         if (!BRANDING_LOGO_TYPES.includes(file.type)) {
             message.error("Logo 仅支持 PNG、JPEG 或 WebP");
             return Upload.LIST_IGNORE;
@@ -69,14 +77,14 @@ export function BrandingSettings() {
             message.error("Logo 图片不能超过 2 MB");
             return Upload.LIST_IGNORE;
         }
-        setUploadingLogo(true);
+        setUploadingLogo(variant);
         try {
-            applyBranding(await uploadBrandingLogo(file));
-            message.success("Logo 已更新");
+            applyBranding(await uploadBrandingLogo(file, variant));
+            message.success(variant === "dark" ? "深色主题 Logo 已更新" : "浅色主题 Logo 已更新");
         } catch (error) {
             message.error(error instanceof Error ? error.message : "上传 Logo 失败");
         } finally {
-            setUploadingLogo(false);
+            setUploadingLogo(null);
         }
         return Upload.LIST_IGNORE;
     };
@@ -197,17 +205,41 @@ export function BrandingSettings() {
 
                 <section className="rounded-xl border border-stone-200 p-5 dark:border-stone-800">
                     <h2 className="text-base font-medium">公司 Logo</h2>
-                    <p className="mt-1 text-sm text-stone-500">支持 PNG、JPEG、WebP，最大 2 MB。</p>
-                    <div className="my-5 flex min-h-24 items-center justify-center rounded-lg border border-dashed border-stone-300 bg-white p-5 dark:border-stone-700">
-                        <BrandLogo className="h-12 max-w-56" invertOnDark={false} />
+                    <p className="mt-1 text-sm text-stone-500">分别上传浅色主题和深色主题使用的 Logo，支持 PNG、JPEG、WebP，最大 2 MB。</p>
+                    <div className="mt-5 grid gap-4 lg:grid-cols-2">
+                        <div className="space-y-3">
+                            <div>
+                                <h3 className="text-sm font-medium">浅色主题 Logo</h3>
+                                <p className="mt-0.5 text-xs text-stone-500">建议使用深色图形，显示在浅色背景上。</p>
+                            </div>
+                            <div className="flex min-h-24 items-center justify-center rounded-lg border border-dashed border-stone-300 bg-white p-4">
+                                <img src={logoUrl} alt="" aria-hidden className="h-12 max-w-full object-contain" />
+                            </div>
+                            <Upload.Dragger className="!block h-40" accept="image/png,image/jpeg,image/webp" maxCount={1} showUploadList={false} beforeUpload={logoUploadHandler("light")} disabled={uploadingLogo !== null}>
+                                <p className="ant-upload-drag-icon">
+                                    <UploadCloud className="mx-auto size-5 text-stone-500" />
+                                </p>
+                                <p className="ant-upload-text">{uploadingLogo === "light" ? "正在上传..." : "上传浅色主题 Logo"}</p>
+                                <p className="ant-upload-hint">点击或拖拽图片到这里</p>
+                            </Upload.Dragger>
+                        </div>
+                        <div className="space-y-3">
+                            <div>
+                                <h3 className="text-sm font-medium">深色主题 Logo</h3>
+                                <p className="mt-0.5 text-xs text-stone-500">建议使用浅色图形，显示在深色背景上。</p>
+                            </div>
+                            <div className="flex min-h-24 items-center justify-center rounded-lg border border-dashed border-stone-700 bg-stone-950 p-4">
+                                <img src={darkLogoUrl} alt="" aria-hidden className={cn("h-12 max-w-full object-contain", isDefaultLogo(darkLogoUrl) && "invert")} />
+                            </div>
+                            <Upload.Dragger className="!block h-40" accept="image/png,image/jpeg,image/webp" maxCount={1} showUploadList={false} beforeUpload={logoUploadHandler("dark")} disabled={uploadingLogo !== null}>
+                                <p className="ant-upload-drag-icon">
+                                    <UploadCloud className="mx-auto size-5 text-stone-500" />
+                                </p>
+                                <p className="ant-upload-text">{uploadingLogo === "dark" ? "正在上传..." : "上传深色主题 Logo"}</p>
+                                <p className="ant-upload-hint">点击或拖拽图片到这里</p>
+                            </Upload.Dragger>
+                        </div>
                     </div>
-                    <Upload.Dragger className="!block h-[220px]" accept="image/png,image/jpeg,image/webp" maxCount={1} showUploadList={false} beforeUpload={beforeUpload} disabled={uploadingLogo}>
-                        <p className="ant-upload-drag-icon">
-                            <UploadCloud className="mx-auto size-6 text-stone-500" />
-                        </p>
-                        <p className="ant-upload-text">{uploadingLogo ? "正在上传..." : "点击或拖拽图片到这里"}</p>
-                        <p className="ant-upload-hint">公司 Logo 会立即应用到所有页面</p>
-                    </Upload.Dragger>
                 </section>
             </div>
 

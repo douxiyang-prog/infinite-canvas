@@ -54,6 +54,7 @@ import { usePluginHost } from "@/pages/canvas/hooks/use-plugin-host";
 import { buildNodeMentionReferences, getGroupResourceNodes, isCanvasReferenceNode, type CanvasResourceReference } from "@/lib/canvas/canvas-resource-references";
 import { exportCanvasProjects, exportSelectedCanvasContent } from "@/lib/canvas/canvas-export";
 import { mergeCanvasArchiveIntoCanvas } from "@/lib/canvas/canvas-import";
+import { appendLensComboPrompt } from "@/lib/canvas/canvas-lens-combo";
 import { applyNodeConfigPatch, audioMetadata, buildAudioGenerationMetadata, buildImageGenerationMetadata, createCanvasNode, imageMetadata, videoMetadata } from "@/lib/canvas/canvas-node-factory";
 import {
     applyGroupSelection,
@@ -86,6 +87,7 @@ import {
     imageExtension,
     isAudioFile,
     isGenerationCanceled,
+    appendRelightPrompt,
     resetInterruptedGeneration,
     resolveMetadataReferences,
     sourceNodeReferenceImages,
@@ -2300,6 +2302,7 @@ function InfiniteCanvasPage() {
             const imageConfig = NODE_DEFAULT_SIZE[CanvasNodeType.Image];
             const title = buildAngleLabel(params);
             const prompt = buildAnglePrompt(params);
+            const requestPrompt = appendRelightPrompt(appendLensComboPrompt(prompt, node.metadata?.lensCombo, node.metadata?.lensPrompt), node.metadata?.relight, node.metadata?.relightPrompt);
             const generationMetadata = buildImageGenerationMetadata("edit", generationConfig, 1, [
                 { id: node.id, name: `${node.title || node.id}.png`, type: node.metadata.mimeType || "image/png", dataUrl: node.metadata.content, storageKey: node.metadata.storageKey },
             ]);
@@ -2314,7 +2317,7 @@ function InfiniteCanvasPage() {
                     position: { x: node.position.x + node.width + 96, y: node.position.y },
                     width: imageConfig.width,
                     height: imageConfig.height,
-                    metadata: { prompt, status: NODE_STATUS_LOADING, ...generationMetadata },
+                    metadata: { prompt, status: NODE_STATUS_LOADING, lensCombo: node.metadata?.lensCombo, lensPrompt: node.metadata?.lensPrompt, lensPresetId: node.metadata?.lensPresetId, relight: node.metadata?.relight, relightPrompt: node.metadata?.relightPrompt, lightingPresetId: node.metadata?.lightingPresetId, ...generationMetadata },
                 },
             ]);
             setConnections((prev) => [...prev, { id: nanoid(), fromNodeId: node.id, toNodeId: childId }]);
@@ -2322,12 +2325,12 @@ function InfiniteCanvasPage() {
             setDialogNodeId(childId);
             const controller = startGenerationRequest(childId, node.id, childId);
             try {
-                const image = await requestEdit(generationConfig, prompt, [{ id: node.id, name: `${node.title || node.id}.png`, type: node.metadata.mimeType || "image/png", dataUrl: node.metadata.content, storageKey: node.metadata.storageKey }], {
+                const image = await requestEdit(generationConfig, requestPrompt, [{ id: node.id, name: `${node.title || node.id}.png`, type: node.metadata.mimeType || "image/png", dataUrl: node.metadata.content, storageKey: node.metadata.storageKey }], {
                     signal: controller.signal,
                 }).then((items) => items[0]);
                 const uploaded = await uploadImage(image.dataUrl, { signal: controller.signal, area: "output" });
                 const size = fitNodeSize(uploaded.width, uploaded.height, imageConfig.width, imageConfig.height);
-                setNodes((prev) => prev.map((item) => (item.id === childId ? { ...item, width: size.width, height: size.height, metadata: { ...item.metadata, ...imageMetadata(uploaded), prompt, ...generationMetadata } } : item)));
+                setNodes((prev) => prev.map((item) => (item.id === childId ? { ...item, width: size.width, height: size.height, metadata: { ...item.metadata, ...imageMetadata(uploaded), prompt, lensCombo: node.metadata?.lensCombo, lensPrompt: node.metadata?.lensPrompt, lensPresetId: node.metadata?.lensPresetId, relight: node.metadata?.relight, relightPrompt: node.metadata?.relightPrompt, lightingPresetId: node.metadata?.lightingPresetId, ...generationMetadata } } : item)));
             } catch (error) {
                 if (isGenerationCanceled(error)) return;
                 const errorDetails = error instanceof Error ? error.message : t("canvas.projectPage.generationFailed");
@@ -2352,6 +2355,7 @@ function InfiniteCanvasPage() {
             const imageConfig = NODE_DEFAULT_SIZE[CanvasNodeType.Image];
             const title = buildRelightLabel(params);
             const prompt = buildRelightPrompt(params);
+            const requestPrompt = appendLensComboPrompt(prompt, node.metadata?.lensCombo);
             const sourceReference = [{ id: node.id, name: `${node.title || node.id}.png`, type: node.metadata.mimeType || "image/png", dataUrl: node.metadata.content, storageKey: node.metadata.storageKey }];
             const generationMetadata = buildImageGenerationMetadata("edit", generationConfig, 1, sourceReference);
             setRelightNodeId(null);
@@ -2365,7 +2369,7 @@ function InfiniteCanvasPage() {
                     position: { x: node.position.x + node.width + 96, y: node.position.y },
                     width: imageConfig.width,
                     height: imageConfig.height,
-                    metadata: { prompt, status: NODE_STATUS_LOADING, relight: { ...params }, ...generationMetadata },
+                    metadata: { prompt, status: NODE_STATUS_LOADING, relight: { ...params }, lensCombo: node.metadata?.lensCombo, ...generationMetadata },
                 },
             ]);
             setConnections((prev) => [...prev, { id: nanoid(), fromNodeId: node.id, toNodeId: childId }]);
@@ -2373,10 +2377,10 @@ function InfiniteCanvasPage() {
             setDialogNodeId(childId);
             const controller = startGenerationRequest(childId, node.id, childId);
             try {
-                const image = await requestEdit(generationConfig, prompt, sourceReference, { signal: controller.signal }).then((items) => items[0]);
+                const image = await requestEdit(generationConfig, requestPrompt, sourceReference, { signal: controller.signal }).then((items) => items[0]);
                 const uploaded = await uploadImage(image.dataUrl, { signal: controller.signal, area: "output" });
                 const size = fitNodeSize(uploaded.width, uploaded.height, imageConfig.width, imageConfig.height);
-                setNodes((prev) => prev.map((item) => (item.id === childId ? { ...item, width: size.width, height: size.height, metadata: { ...item.metadata, ...imageMetadata(uploaded), prompt, relight: { ...params }, ...generationMetadata } } : item)));
+                setNodes((prev) => prev.map((item) => (item.id === childId ? { ...item, width: size.width, height: size.height, metadata: { ...item.metadata, ...imageMetadata(uploaded), prompt, relight: { ...params }, lensCombo: node.metadata?.lensCombo, ...generationMetadata } } : item)));
             } catch (error) {
                 if (isGenerationCanceled(error)) return;
                 const errorDetails = error instanceof Error ? error.message : t("canvas.projectPage.generationFailed");
@@ -2629,7 +2633,7 @@ function InfiniteCanvasPage() {
                 const controller = startGenerationRequest(nodeId, nodeId, nodeId);
                 setNodes((prev) => prev.map((node) => (node.id === nodeId ? { ...node, metadata: { ...node.metadata, prompt: scene, status: NODE_STATUS_LOADING, errorDetails: undefined } } : node)));
                 try {
-                    const fullPrompt = (builtinPanel.promptPrefix || "") + scene;
+                    const fullPrompt = appendRelightPrompt(appendLensComboPrompt((builtinPanel.promptPrefix || "") + scene, sourceNode.metadata?.lensCombo, sourceNode.metadata?.lensPrompt), sourceNode.metadata?.relight, sourceNode.metadata?.relightPrompt);
                     const context = await hydrateNodeGenerationContext(buildNodeGenerationContext(nodeId, nodesRef.current, connectionsRef.current, fullPrompt));
                     const refs = context.referenceImages;
                     const image = refs.length
@@ -2660,14 +2664,16 @@ function InfiniteCanvasPage() {
             const generationContext = await hydrateNodeGenerationContext(
                 buildNodeGenerationContext(nodeId, nodesRef.current, connectionsRef.current, editingTextNode ? t("canvas.projectPage.editTextPrompt", { source: sourceTextContent, prompt }) : prompt),
             );
-            const effectivePrompt = generationContext.prompt.trim();
+            const visiblePrompt = generationContext.prompt.trim();
+            const lensPrompt = mode === "image" || mode === "video" ? appendLensComboPrompt(visiblePrompt, sourceNode?.metadata?.lensCombo, sourceNode?.metadata?.lensPrompt) : visiblePrompt;
+            const requestPrompt = mode === "image" ? appendRelightPrompt(lensPrompt, sourceNode?.metadata?.relight, sourceNode?.metadata?.relightPrompt) : lensPrompt;
             if (runController.signal.aborted) {
                 finishGenerationRequest(nodeId, runController);
                 setRunningNodeId(null);
                 return;
             }
             const markSourceStatus = sourceNode?.type !== CanvasNodeType.Image && !editingTextNode;
-            if (!effectivePrompt && (mode === "text" || mode === "audio")) {
+            if (!visiblePrompt && (mode === "text" || mode === "audio")) {
                 finishGenerationRequest(nodeId, runController);
                 setRunningNodeId(null);
                 return;
@@ -2699,7 +2705,7 @@ function InfiniteCanvasPage() {
                     const rootNode: CanvasNodeData = {
                         id: rootId,
                         type: CanvasNodeType.Image,
-                        title: effectivePrompt.slice(0, 32) || "Generated Image",
+                        title: visiblePrompt.slice(0, 32) || "Generated Image",
                         position: {
                             x: reuseImageNode ? parentPosition.x : parentPosition.x + parentConfig.width + 96,
                             y: parentPosition.y + parentConfig.height / 2 - imageConfig.height / 2,
@@ -2707,7 +2713,13 @@ function InfiniteCanvasPage() {
                         width: reuseImageNode ? sourceNode?.width || imageConfig.width : imageConfig.width,
                         height: reuseImageNode ? sourceNode?.height || imageConfig.height : imageConfig.height,
                         metadata: {
-                            prompt: effectivePrompt,
+                            prompt: visiblePrompt,
+                            lensCombo: sourceNode?.metadata?.lensCombo,
+                            lensPrompt: sourceNode?.metadata?.lensPrompt,
+                            lensPresetId: sourceNode?.metadata?.lensPresetId,
+                            relight: sourceNode?.metadata?.relight,
+                            relightPrompt: sourceNode?.metadata?.relightPrompt,
+                            lightingPresetId: sourceNode?.metadata?.lightingPresetId,
                             status: NODE_STATUS_LOADING,
                             images: imageIds.map((id) => ({ id, status: NODE_STATUS_LOADING, content: "", naturalWidth: 0, naturalHeight: 0, bytes: 0, mimeType: "" })),
                             primaryImageId: undefined,
@@ -2762,8 +2774,8 @@ function InfiniteCanvasPage() {
                         imageIds.map(async (imageId) => {
                             try {
                                 const image = referenceImages.length
-                                    ? await requestEdit({ ...generationConfig, count: "1" }, effectivePrompt, referenceImages, { signal: controller.signal }).then((items) => items[0])
-                                    : await requestGeneration({ ...generationConfig, count: "1" }, effectivePrompt, { signal: controller.signal }).then((items) => items[0]);
+                                    ? await requestEdit({ ...generationConfig, count: "1" }, requestPrompt, referenceImages, { signal: controller.signal }).then((items) => items[0])
+                                    : await requestGeneration({ ...generationConfig, count: "1" }, requestPrompt, { signal: controller.signal }).then((items) => items[0]);
                                 const uploaded = await uploadImage(image.dataUrl, { signal: controller.signal, area: "output" });
                                 const imageSize = fitNodeSize(uploaded.width, uploaded.height, imageConfig.width, imageConfig.height);
                                 const item: CanvasNodeImage = {
@@ -2846,12 +2858,15 @@ function InfiniteCanvasPage() {
                     const videoNode: CanvasNodeData = {
                         id: videoId,
                         type: CanvasNodeType.Video,
-                        title: effectivePrompt.slice(0, 32) || "Generated Video",
+                        title: visiblePrompt.slice(0, 32) || "Generated Video",
                         position: reuseVideoNode ? sourceNode.position : { x: parent.x + (sourceNode?.width || spec.width) + 96, y: parent.y },
                         width: reuseVideoNode ? sourceNode.width : spec.width,
                         height: reuseVideoNode ? sourceNode.height : spec.height,
                         metadata: {
-                            prompt: effectivePrompt,
+                            prompt: visiblePrompt,
+                            lensCombo: sourceNode?.metadata?.lensCombo,
+                            lensPrompt: sourceNode?.metadata?.lensPrompt,
+                            lensPresetId: sourceNode?.metadata?.lensPresetId,
                             status: NODE_STATUS_LOADING,
                             model: generationConfig.model,
                             size: generationConfig.size,
@@ -2880,7 +2895,7 @@ function InfiniteCanvasPage() {
                         await completeVideoNodeTask(
                             videoId,
                             generationConfig,
-                            effectivePrompt,
+                            requestPrompt,
                             generationContext.referenceImages,
                             controller.signal,
                             {
@@ -2911,11 +2926,11 @@ function InfiniteCanvasPage() {
                     const audioNode: CanvasNodeData = {
                         id: audioId,
                         type: CanvasNodeType.Audio,
-                        title: effectivePrompt.slice(0, 32) || "Generated Audio",
+                        title: visiblePrompt.slice(0, 32) || "Generated Audio",
                         position: reuseAudioNode ? sourceNode.position : { x: parent.x + (sourceNode?.width || spec.width) + 96, y: parent.y + ((sourceNode?.height || spec.height) - spec.height) / 2 },
                         width: reuseAudioNode ? sourceNode.width : spec.width,
                         height: reuseAudioNode ? sourceNode.height : spec.height,
-                        metadata: { prompt: effectivePrompt, status: NODE_STATUS_LOADING, ...buildAudioGenerationMetadata(generationConfig) },
+                        metadata: { prompt: visiblePrompt, status: NODE_STATUS_LOADING, ...buildAudioGenerationMetadata(generationConfig) },
                     };
                     pendingChildIds = [audioId];
                     setNodes((prev) =>
@@ -2926,8 +2941,8 @@ function InfiniteCanvasPage() {
                     if (!reuseAudioNode) setConnections((prev) => [...prev, { id: nanoid(), fromNodeId: nodeId, toNodeId: audioId }]);
                     const controller = startGenerationRequest(audioId, nodeId, nodeId, runController);
                     try {
-                        const audio = await storeGeneratedAudio(await requestAudioGeneration(generationConfig, effectivePrompt, { signal: controller.signal }), generationConfig.audioFormat);
-                        setNodes((prev) => prev.map((node) => (node.id === audioId ? { ...node, metadata: { ...node.metadata, ...audioMetadata(audio), prompt: effectivePrompt, ...buildAudioGenerationMetadata(generationConfig) } } : node)));
+                        const audio = await storeGeneratedAudio(await requestAudioGeneration(generationConfig, visiblePrompt, { signal: controller.signal }), generationConfig.audioFormat);
+                        setNodes((prev) => prev.map((node) => (node.id === audioId ? { ...node, metadata: { ...node.metadata, ...audioMetadata(audio), prompt: visiblePrompt, ...buildAudioGenerationMetadata(generationConfig) } } : node)));
                     } finally {
                         finishGenerationRequest(audioId, controller);
                     }
@@ -2946,12 +2961,12 @@ function InfiniteCanvasPage() {
                 const rootNode: CanvasNodeData = {
                     id: rootId,
                     type: CanvasNodeType.Text,
-                    title: effectivePrompt.slice(0, 32) || "Generated Text",
+                    title: visiblePrompt.slice(0, 32) || "Generated Text",
                     position: reuseTextNode ? sourceNode.position : { x: parentPosition.x + parentConfig.width + 96, y: parentPosition.y + parentConfig.height / 2 - textConfig.height / 2 },
                     width: reuseTextNode ? sourceNode.width : textConfig.width,
                     height: reuseTextNode ? sourceNode.height : textConfig.height,
                     metadata: {
-                        prompt: effectivePrompt,
+                        prompt: visiblePrompt,
                         status: NODE_STATUS_LOADING,
                         fontSize: 14,
                         model: generationConfig.model,
@@ -2999,7 +3014,7 @@ function InfiniteCanvasPage() {
                         try {
                             const answer = await requestImageQuestion(
                                 generationConfig,
-                                buildNodeResponseMessages({ ...generationContext, prompt: effectivePrompt }),
+                                buildNodeResponseMessages({ ...generationContext, prompt: visiblePrompt }),
                                 (text) => {
                                     streamed = text;
                                     pendingContent = text;
@@ -3128,6 +3143,10 @@ function InfiniteCanvasPage() {
                 message.warning(t("canvas.projectPage.retryPromptMissing"));
                 return;
             }
+            const requestPrompt =
+                node.type === CanvasNodeType.Image || node.type === CanvasNodeType.Video
+                    ? appendRelightPrompt(appendLensComboPrompt(prompt, node.metadata?.lensCombo || sourceNode.metadata?.lensCombo, node.metadata?.lensPrompt || sourceNode.metadata?.lensPrompt), node.metadata?.relight || sourceNode.metadata?.relight, node.metadata?.relightPrompt || sourceNode.metadata?.relightPrompt)
+                    : prompt;
             const generationType = savedImageMetadata?.generationType;
             const useReferenceImages = generationType ? generationType === "edit" : Boolean(context?.referenceImages.length);
             const retryReferenceImages =
@@ -3191,7 +3210,7 @@ function InfiniteCanvasPage() {
                     await completeVideoNodeTask(
                         node.id,
                         generationConfig,
-                        prompt,
+                        requestPrompt,
                         retryImages,
                         controller.signal,
                         {
@@ -3215,8 +3234,8 @@ function InfiniteCanvasPage() {
                 }
 
                 const image = useReferenceImages
-                    ? await requestEdit(generationConfig, prompt, retryImages, { signal: controller.signal }).then((items) => items[0])
-                    : await requestGeneration(generationConfig, prompt, { signal: controller.signal }).then((items) => items[0]);
+                    ? await requestEdit(generationConfig, requestPrompt, retryImages, { signal: controller.signal }).then((items) => items[0])
+                    : await requestGeneration(generationConfig, requestPrompt, { signal: controller.signal }).then((items) => items[0]);
                 const uploadedImage = await uploadImage(image.dataUrl, { signal: controller.signal, area: "output" });
                 const imageConfig = NODE_DEFAULT_SIZE[CanvasNodeType.Image];
                 const retryImage: CanvasNodeImage = {
@@ -3862,7 +3881,11 @@ function InfiniteCanvasPage() {
                         initialParams={relightNode.metadata.relight}
                         open={Boolean(relightNode)}
                         onClose={() => setRelightNodeId(null)}
-                        onConfirm={(params) => void generateRelightNode(relightNode!, params)}
+                        onConfirm={(params, prompt, presetId) => {
+                            const targetId = relightNode.id;
+                            setNodes((prev) => prev.map((item) => (item.id === targetId ? { ...item, metadata: { ...item.metadata, relight: { ...params }, relightPrompt: prompt, lightingPresetId: presetId } } : item)));
+                            setRelightNodeId(null);
+                        }}
                     />
                 ) : null}
 

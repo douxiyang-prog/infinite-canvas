@@ -13,6 +13,7 @@ import CgtwCanvasPage from "@/pages/cgtw/canvas";
 import HomePage from "@/pages/home";
 import ImagePage from "@/pages/image";
 import LoginPage from "@/pages/login";
+import LensComboDemoPage from "@/pages/lens-combo-demo";
 import NotFound from "@/pages/not-found";
 import PromptsPage from "@/pages/prompts";
 import ProjectsPage from "@/pages/projects";
@@ -23,6 +24,7 @@ import VideoPage from "@/pages/video";
 
 export const router = createBrowserRouter([
     { path: "/login", element: <LoginPage /> },
+    { path: "/lens-combo-demo", element: <LensComboDemoPage /> },
     {
         element: <RequireAuth />,
         children: [

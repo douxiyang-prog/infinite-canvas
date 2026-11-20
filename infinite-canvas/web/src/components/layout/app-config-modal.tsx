@@ -10,6 +10,7 @@ import { BrandingSettings } from "@/components/layout/branding-settings";
 import { ChannelEditorDrawer } from "@/components/layout/channel-editor-drawer";
 import { ConfigLocalProxy } from "@/components/layout/config-local-proxy";
 import { ConfigPromptSources } from "@/components/layout/config-prompt-sources";
+import { ConfigPromptPresets } from "@/components/layout/config-prompt-presets";
 import { ConfigLocalStorage } from "@/components/layout/config-local-storage";
 import { ConfigServerStorage } from "@/components/layout/config-server-storage";
 import { ProjectSceneSettings } from "@/components/layout/project-scene-settings";
@@ -321,6 +322,11 @@ export function AppConfigPanel({
                         key: "prompt-sources",
                         label: t("config.tabs.promptSources"),
                         children: <ConfigPromptSources />,
+                    },
+                    {
+                        key: "prompt-presets",
+                        label: "提示词预设",
+                        children: <ConfigPromptPresets />,
                     },
                     {
                         key: "webdav",

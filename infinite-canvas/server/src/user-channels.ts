@@ -156,6 +156,7 @@ export async function getEffectiveUserConfig(userId: number) {
     config: globalConfig.config ? config : null,
     webdav: null,
     promptSources: null,
+    promptPresets: globalConfig.promptPresets,
     updatedAt: assignment.updatedAt || globalConfig.updatedAt,
   };
 }

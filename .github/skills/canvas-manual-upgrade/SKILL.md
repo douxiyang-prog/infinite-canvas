@@ -69,3 +69,33 @@ ssh -t -i "$env:USERPROFILE\.ssh\canvas-deploy" lynn@192.168.1.69 "cd /opt/infin
 ```
 
 先上传成功再执行对应更新命令。`&&` 位于远端 Linux shell 的引号内，不是本机 PowerShell 运算符。提醒升级会重建并重启服务，分别确认最后输出“健康检查通过”和“更新完成”；本机构建和包校验通过不等于服务器已经升级成功。
+
+## 已验证的具体命令实例
+
+下面这组命令已在 `light-presets` 升级包上逐条验证通过，包含两个上传命令和两个远端更新命令。实际生成新包时替换其中的时间戳、主题和路径，但保留这种“先上传、再更新、两台机器分开执行”的形式。
+
+### 上传 `.68`
+
+```powershell
+scp -i "C:\Users\lynn\.ssh\canvas-deploy" "C:\Users\lynn\Documents\GitHub\canvas\canvas-build-src-20261118-170114-light-presets-source.tar.gz" lynn@192.168.1.68:/tmp/
+```
+
+### 上传 `.69`
+
+```powershell
+scp -i "C:\Users\lynn\.ssh\canvas-deploy" "C:\Users\lynn\Documents\GitHub\canvas\canvas-build-src-20261118-170114-light-presets-69-offline.tar.gz" lynn@192.168.1.69:/tmp/
+```
+
+### 更新 `.68`
+
+```powershell
+ssh -t -i "C:\Users\lynn\.ssh\canvas-deploy" lynn@192.168.1.68 "cd /opt/infinite-canvas-deploy && sudo bash update-canvas-from-tar.sh /tmp/canvas-build-src-20261118-170114-light-presets-source.tar.gz"
+```
+
+### 更新 `.69`
+
+```powershell
+ssh -t -i "C:\Users\lynn\.ssh\canvas-deploy" lynn@192.168.1.69 "cd /opt/infinite-canvas-deploy && sudo bash update-canvas-from-tar.sh /tmp/canvas-build-src-20261118-170114-light-presets-69-offline.tar.gz"
+```
+
+不要给命令块添加本地 PowerShell 的 `&&`，也不要省略 `ssh -t`。`&&` 只保留在远端双引号内的 Linux 命令中，用于先进入 `/opt/infinite-canvas-deploy` 再执行更新脚本。每条命令完成后应检查退出码；`.68` 和 `.69` 都必须分别看到更新脚本输出“健康检查通过”和“更新完成”。

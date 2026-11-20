@@ -54,6 +54,13 @@ export type CanvasImageRelightParams = {
     rimLight: boolean;
 };
 
+export type CanvasLensCombo = {
+    cameraId: string;
+    lensId: string;
+    focalLengthMm: number;
+    aperture: number;
+};
+
 export type CanvasNodeMetadata = {
     content?: string;
     composerContent?: string;
@@ -83,6 +90,11 @@ export type CanvasNodeMetadata = {
     audioSpeed?: string;
     audioInstructions?: string;
     relight?: CanvasImageRelightParams;
+    relightPrompt?: string;
+    lightingPresetId?: string;
+    lensCombo?: CanvasLensCombo;
+    lensPrompt?: string;
+    lensPresetId?: string;
     references?: string[];
     naturalWidth?: number;
     naturalHeight?: number;

@@ -225,6 +225,11 @@ export function buildRelightPrompt(params: CanvasImageRelightParams) {
     });
 }
 
+export function appendRelightPrompt(prompt: string, params?: CanvasImageRelightParams, promptOverride?: string) {
+    const lighting = promptOverride?.trim() || (params ? buildRelightPrompt(params) : "");
+    return lighting && !prompt.includes("Use the reference image as the only source and relight it.") ? `${prompt.trim()}\n\n${lighting}` : prompt;
+}
+
 function relightDirectionKey(params: CanvasImageRelightParams) {
     if (params.lightY > 0.56) return "top";
     if (params.lightY < -0.56) return "bottom";

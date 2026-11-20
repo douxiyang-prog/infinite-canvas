@@ -36,6 +36,9 @@ CREATE TABLE IF NOT EXISTS app_settings (
     logo_data MEDIUMBLOB NULL,
     logo_mime VARCHAR(64) NULL,
     logo_updated_at DATETIME(3) NULL,
+    dark_logo_data MEDIUMBLOB NULL,
+    dark_logo_mime VARCHAR(64) NULL,
+    dark_logo_updated_at DATETIME(3) NULL,
     updated_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
     PRIMARY KEY (id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

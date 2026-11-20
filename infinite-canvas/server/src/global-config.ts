@@ -32,6 +32,7 @@ export type GlobalConfigSnapshot = {
   config: Record<string, unknown> | null;
   webdav: Record<string, unknown> | null;
   promptSources: Record<string, unknown> | null;
+  promptPresets: Record<string, unknown> | null;
   updatedAt: string | null;
 };
 
@@ -101,6 +102,7 @@ function snapshot(value: unknown): GlobalConfigSnapshot | null {
     config: valueSnapshot.config || null,
     webdav: valueSnapshot.webdav || null,
     promptSources: valueSnapshot.promptSources || null,
+    promptPresets: valueSnapshot.promptPresets || null,
     updatedAt: valueSnapshot.updatedAt || null,
   };
 }
@@ -120,6 +122,7 @@ export async function getGlobalConfig() {
       config: null,
       webdav: null,
       promptSources: null,
+      promptPresets: null,
       updatedAt: null,
     }
   );
@@ -131,6 +134,7 @@ export async function saveGlobalConfig(
     config: unknown;
     webdav: unknown;
     promptSources: unknown;
+    promptPresets?: unknown;
   },
   userId: number,
 ) {
@@ -144,6 +148,13 @@ export async function saveGlobalConfig(
     Array.isArray(input.promptSources)
   )
     throw new HttpError(400, "提示词来源配置格式不正确");
+  if (
+    input.promptPresets !== undefined &&
+    (!input.promptPresets ||
+      typeof input.promptPresets !== "object" ||
+      Array.isArray(input.promptPresets))
+  )
+    throw new HttpError(400, "提示词预设配置格式不正确");
   const current = await readSnapshot();
   const currentVersion = current?.version || 0;
   if (input.expectedVersion !== currentVersion)
@@ -154,6 +165,7 @@ export async function saveGlobalConfig(
     config: input.config as Record<string, unknown>,
     webdav: input.webdav as Record<string, unknown>,
     promptSources: input.promptSources as Record<string, unknown>,
+    promptPresets: (input.promptPresets || current?.promptPresets || null) as Record<string, unknown> | null,
     updatedAt: new Date().toISOString(),
   };
   if (!encryptionKey())

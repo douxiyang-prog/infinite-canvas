@@ -2,6 +2,7 @@ import { apiRequest } from "@/services/api/auth";
 
 export type BrandingInfo = {
     companyName: string | null;
+    darkLogoUrl: string | null;
     loginBackground: LoginBackgroundMode;
     loginLogoOffsetX: number;
     loginLogoOffsetY: number;
@@ -10,6 +11,7 @@ export type BrandingInfo = {
 };
 
 export type LoginBackgroundMode = "original" | "nebula";
+export type BrandingLogoVariant = "light" | "dark";
 
 export const MAX_BRANDING_LOGO_BYTES = 2 * 1024 * 1024;
 export const BRANDING_LOGO_TYPES = ["image/png", "image/jpeg", "image/webp"];
@@ -40,8 +42,8 @@ export async function updateLoginLogoOffset(loginLogoOffsetX: number, loginLogoO
     });
 }
 
-export async function uploadBrandingLogo(file: File) {
-    return apiRequest<BrandingInfo>("/api/admin/branding/logo", {
+export async function uploadBrandingLogo(file: File, variant: BrandingLogoVariant = "light") {
+    return apiRequest<BrandingInfo>(variant === "dark" ? "/api/admin/branding/logo-dark" : "/api/admin/branding/logo", {
         method: "PUT",
         headers: { "Content-Type": file.type },
         body: file,

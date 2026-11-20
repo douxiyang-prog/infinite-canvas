@@ -63,6 +63,30 @@ export async function migrate() {
       "ALTER TABLE app_settings ADD COLUMN login_logo_offset_y SMALLINT NOT NULL DEFAULT 0 AFTER login_logo_offset_x",
     );
   }
+  const [darkLogoDataColumns] = await db.query<
+    Array<RowDataPacket & { Field: string }>
+  >("SHOW COLUMNS FROM app_settings LIKE 'dark_logo_data'");
+  if (!darkLogoDataColumns.length) {
+    await db.query(
+      "ALTER TABLE app_settings ADD COLUMN dark_logo_data MEDIUMBLOB NULL AFTER logo_updated_at",
+    );
+  }
+  const [darkLogoMimeColumns] = await db.query<
+    Array<RowDataPacket & { Field: string }>
+  >("SHOW COLUMNS FROM app_settings LIKE 'dark_logo_mime'");
+  if (!darkLogoMimeColumns.length) {
+    await db.query(
+      "ALTER TABLE app_settings ADD COLUMN dark_logo_mime VARCHAR(64) NULL AFTER dark_logo_data",
+    );
+  }
+  const [darkLogoUpdatedColumns] = await db.query<
+    Array<RowDataPacket & { Field: string }>
+  >("SHOW COLUMNS FROM app_settings LIKE 'dark_logo_updated_at'");
+  if (!darkLogoUpdatedColumns.length) {
+    await db.query(
+      "ALTER TABLE app_settings ADD COLUMN dark_logo_updated_at DATETIME(3) NULL AFTER dark_logo_mime",
+    );
+  }
   const [canvasProjectColumns] = await db.query<
     Array<RowDataPacket & { Field: string }>
   >("SHOW COLUMNS FROM canvas_projects LIKE 'team_project_id'");

@@ -9,6 +9,7 @@ import { useCanvasEffectiveConfig } from "@/stores/canvas/use-canvas-image-prefe
 import { canvasThemes } from "@/lib/canvas-theme";
 import { useThemeStore } from "@/stores/use-theme-store";
 import { CanvasImageSettingsPopover } from "./canvas-image-settings-popover";
+import { CanvasLensComboPopover } from "./canvas-lens-combo-popover";
 import { CanvasPromptLibrary } from "./canvas-prompt-library";
 import { CanvasAudioSettingsPopover, type CanvasAudioSettingKey } from "./canvas-audio-settings-popover";
 import { CanvasPromptChipInput, type CanvasPromptChipInputHandle } from "./canvas-prompt-chip-input";
@@ -38,7 +39,21 @@ type CanvasNodePromptPanelProps = {
     modeOverride?: CanvasNodeGenerationMode; // Plugin nodes set their generation type through useBuiltinPanel.mode.
 };
 
-export function CanvasNodePromptPanel({ node, nodes, isRunning, onPromptChange, onConfigChange, onGenerate, onStop, mentionReferences = [], connectedNodes = [], onDisconnectReference, onStartReferenceSelection, onImageSettingsOpenChange, modeOverride }: CanvasNodePromptPanelProps) {
+export function CanvasNodePromptPanel({
+    node,
+    nodes,
+    isRunning,
+    onPromptChange,
+    onConfigChange,
+    onGenerate,
+    onStop,
+    mentionReferences = [],
+    connectedNodes = [],
+    onDisconnectReference,
+    onStartReferenceSelection,
+    onImageSettingsOpenChange,
+    modeOverride,
+}: CanvasNodePromptPanelProps) {
     const { t } = useTranslation();
     const globalConfig = useCanvasEffectiveConfig();
     const openConfigDialog = useConfigStore((state) => state.openConfigDialog);
@@ -99,7 +114,14 @@ export function CanvasNodePromptPanel({ node, nodes, isRunning, onPromptChange, 
             <div className="mt-2 flex min-w-0 flex-wrap items-center justify-between gap-2">
                 <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
                     <Tooltip title={t("canvas.promptPanel.expandEditor")}>
-                        <Button type="text" className="!h-8 !w-8 !min-w-8 shrink-0 !rounded-full !bg-transparent !p-0" style={{ color: theme.node.text }} icon={<Maximize2 className="size-3.5" />} onClick={openExpandedEditor} aria-label={t("canvas.promptPanel.expandEditor")} />
+                        <Button
+                            type="text"
+                            className="!h-8 !w-8 !min-w-8 shrink-0 !rounded-full !bg-transparent !p-0"
+                            style={{ color: theme.node.text }}
+                            icon={<Maximize2 className="size-3.5" />}
+                            onClick={openExpandedEditor}
+                            aria-label={t("canvas.promptPanel.expandEditor")}
+                        />
                     </Tooltip>
                     <CanvasPromptLibrary onSelect={updatePrompt} />
                     {mode === "image" ? (
@@ -127,11 +149,25 @@ export function CanvasNodePromptPanel({ node, nodes, isRunning, onPromptChange, 
                     ) : (
                         <>
                             <ModelPicker config={config} value={config.model} onChange={(model) => onConfigChange(node.id, { model })} capability="text" onMissingConfig={() => openConfigDialog(true)} className="max-w-[190px]" />
-                            <CanvasTextSettingsPopover config={config} count={node.metadata?.textCount || 1} onConfigChange={(_, value) => onConfigChange(node.id, { reasoningEffort: value })} onCountChange={(textCount) => onConfigChange(node.id, { textCount })} />
+                            <CanvasTextSettingsPopover
+                                config={config}
+                                count={node.metadata?.textCount || 1}
+                                onConfigChange={(_, value) => onConfigChange(node.id, { reasoningEffort: value })}
+                                onCountChange={(textCount) => onConfigChange(node.id, { textCount })}
+                            />
                         </>
                     )}
                 </div>
                 <div className="ml-auto flex shrink-0 items-center gap-1">
+                    {mode === "image" || mode === "video" ? (
+                        <CanvasLensComboPopover
+                            value={node.metadata?.lensCombo}
+                            compact
+                            placement="topRight"
+                            buttonClassName="inline-flex h-10 max-w-[112px] items-center gap-1.5 rounded-full border px-3 text-xs transition hover:bg-black/5 dark:hover:bg-white/10"
+                            onApply={(lensCombo, lensPrompt, lensPresetId) => onConfigChange(node.id, { lensCombo, lensPrompt, lensPresetId })}
+                        />
+                    ) : null}
                     <VoiceInputButton
                         key={`${node.id}-inline`}
                         onText={(text) => promptInputRef.current?.insertText(text)}
@@ -167,7 +203,16 @@ export function CanvasNodePromptPanel({ node, nodes, isRunning, onPromptChange, 
             </div>
             <Modal title={t("canvas.promptPanel.editorTitle")} open={expanded} centered width={760} footer={null} onCancel={() => setExpanded(false)} destroyOnHidden>
                 <div data-canvas-no-zoom className="pt-2" onWheelCapture={(event) => event.stopPropagation()}>
-                    <CanvasNodeReferenceBar nodeId={node.id} nodes={nodes} connectedNodes={connectedNodes} onDisconnect={onDisconnectReference} onStartSelection={(nodeId) => { setExpanded(false); onStartReferenceSelection?.(nodeId); }} />
+                    <CanvasNodeReferenceBar
+                        nodeId={node.id}
+                        nodes={nodes}
+                        connectedNodes={connectedNodes}
+                        onDisconnect={onDisconnectReference}
+                        onStartSelection={(nodeId) => {
+                            setExpanded(false);
+                            onStartReferenceSelection?.(nodeId);
+                        }}
+                    />
                     <CanvasPromptChipInput
                         ref={expandedPromptInputRef}
                         value={prompt}
