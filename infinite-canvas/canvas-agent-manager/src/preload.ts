@@ -6,6 +6,7 @@ contextBridge.exposeInMainWorld("manager", {
     stop: () => ipcRenderer.invoke("manager:stop"),
     restart: () => ipcRenderer.invoke("manager:restart"),
     saveSettings: (settings: unknown) => ipcRenderer.invoke("manager:save-settings", settings),
+    setProxy: (settings: unknown) => ipcRenderer.invoke("manager:set-proxy", settings),
     copyToken: () => ipcRenderer.invoke("manager:copy-token"),
     openCanvas: () => ipcRenderer.invoke("manager:open-canvas"),
     openDataFolder: () => ipcRenderer.invoke("manager:open-data-folder"),

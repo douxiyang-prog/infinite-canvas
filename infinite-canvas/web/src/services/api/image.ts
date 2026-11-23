@@ -346,9 +346,17 @@ function geminiApiUrl(config: Pick<AiConfig, "baseUrl" | "model">, action?: "gen
     return withLocalProxy(`${baseUrl}/models/${encodeURIComponent(geminiModelName(config.model))}:${action}`);
 }
 
-function geminiHeaders(config: Pick<AiConfig, "apiKey">) {
+function geminiHeaders(config: Pick<AiConfig, "apiKey" | "baseUrl">) {
+    let hostname = "";
+    try {
+        hostname = new URL(config.baseUrl, "http://localhost").hostname.toLowerCase();
+    } catch {
+        // Relative or malformed gateway URLs still use New API-compatible auth.
+    }
     return {
         "x-goog-api-key": config.apiKey,
+        // New API-compatible Gemini gateways authenticate their own keys with Bearer auth.
+        ...(!hostname.endsWith(".googleapis.com") ? { Authorization: `Bearer ${config.apiKey}` } : {}),
         "Content-Type": "application/json",
     };
 }

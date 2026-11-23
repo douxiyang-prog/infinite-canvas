@@ -8,6 +8,12 @@ const elements = {
   port: document.querySelector("#port"),
   runtime: document.querySelector("#runtime"),
   canvasUrl: document.querySelector("#canvas-url"),
+  proxyHost: document.querySelector("#proxy-host"),
+  proxyPort: document.querySelector("#proxy-port"),
+  proxyBypass: document.querySelector("#proxy-bypass"),
+  proxyStatus: document.querySelector("#proxy-status"),
+  proxyEnableButton: document.querySelector("#proxy-enable"),
+  proxyDisableButton: document.querySelector("#proxy-disable"),
   startOnLaunch: document.querySelector("#start-on-launch"),
   autoRestart: document.querySelector("#auto-restart"),
   minimizeToTray: document.querySelector("#minimize-to-tray"),
@@ -67,6 +73,13 @@ function render(state) {
   codexOption.disabled = !state.components?.codex;
   elements.runtime.value = state.settings.runtime;
   elements.canvasUrl.value = state.settings.canvasUrl;
+  elements.proxyHost.value = state.settings.proxyHost;
+  elements.proxyPort.value = state.settings.proxyPort;
+  elements.proxyBypass.value = state.settings.proxyBypass;
+  elements.proxyStatus.textContent = state.settings.proxyEnabled ? "已启用" : "已关闭";
+  elements.proxyStatus.className = `proxy-status ${state.settings.proxyEnabled ? "enabled" : "disabled"}`;
+  elements.proxyEnableButton.disabled = state.settings.proxyEnabled;
+  elements.proxyDisableButton.disabled = !state.settings.proxyEnabled;
   elements.startOnLaunch.checked = state.settings.startOnLaunch;
   elements.autoRestart.checked = state.settings.autoRestart;
   elements.minimizeToTray.checked = state.settings.minimizeToTray;
@@ -114,6 +127,18 @@ elements.saveButton.addEventListener("click", () => run(() => window.manager.sav
   autoRestart: elements.autoRestart.checked,
   minimizeToTray: elements.minimizeToTray.checked,
 }), "设置已保存"));
+async function setProxy(enabled) {
+  await run(() => window.manager.setProxy({
+    proxyEnabled: enabled,
+    proxyHost: elements.proxyHost.value,
+    proxyPort: Number(elements.proxyPort.value),
+    proxyBypass: elements.proxyBypass.value,
+  }), enabled ? "代理已开启" : "代理已关闭");
+}
+
+elements.proxyEnableButton.addEventListener("click", () => void setProxy(true));
+elements.proxyDisableButton.addEventListener("click", () => void setProxy(false));
+
 elements.copyToken.addEventListener("click", () => run(async () => {
   await window.manager.copyToken();
   showToast("Token 已复制");

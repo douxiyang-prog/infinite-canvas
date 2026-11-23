@@ -15,6 +15,10 @@ type ManagerSettings = {
     port: number;
     runtime: AgentRuntime;
     canvasUrl: string;
+    proxyEnabled: boolean;
+    proxyHost: string;
+    proxyPort: number;
+    proxyBypass: string;
     startOnLaunch: boolean;
     autoRestart: boolean;
     minimizeToTray: boolean;
@@ -27,6 +31,12 @@ type AgentConfig = {
     origins?: string[];
     workspace?: { workspacePath: string; activeThreadId?: string; pinnedThreadIds?: string[] };
     dsh?: { apiKey?: string };
+};
+
+type SystemProxyBackup = {
+    enabled: number;
+    server: string;
+    override: string;
 };
 
 type ManagerState = {
@@ -46,10 +56,16 @@ const DEFAULT_SETTINGS: ManagerSettings = {
     port: 17371,
     runtime: "canvas",
     canvasUrl: "http://192.168.1.68",
+    proxyEnabled: true,
+    proxyHost: "192.168.1.65",
+    proxyPort: 3333,
+    proxyBypass: "localhost,127.0.0.1,::1,192.168.0.0/16,10.0.0.0/8,172.16.0.0/12,ark.cn-beijing.volces.com,api.deepseek.com,api-beijing.klingai.com,.volces.com,.deepseek.com,.klingai.com",
     startOnLaunch: true,
     autoRestart: true,
     minimizeToTray: true,
 };
+const PROXY_ENV_KEYS = ["HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "NO_PROXY", "http_proxy", "https_proxy", "all_proxy", "no_proxy"];
+const WINDOWS_INTERNET_SETTINGS_KEY = "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Internet Settings";
 const execFileAsync = promisify(execFile);
 
 let mainWindow: BrowserWindow | null = null;
@@ -64,6 +80,7 @@ let lastError = "";
 let logs: string[] = [];
 
 const settingsFile = () => path.join(app.getPath("userData"), "manager-settings.json");
+const systemProxyBackupFile = () => path.join(app.getPath("userData"), "system-proxy-backup.json");
 const agentConfigDir = () => path.join(app.getPath("home"), ".infinite-canvas");
 const agentConfigFile = () => path.join(agentConfigDir(), "canvas-agent.json");
 
@@ -74,6 +91,10 @@ function loadSettings(): ManagerSettings {
             port: validPort(stored.port) ? Number(stored.port) : DEFAULT_SETTINGS.port,
             runtime: validRuntime(stored.runtime) && (stored.runtime !== "dsh" || dshAvailable()) && (stored.runtime !== "codex" || codexAvailable()) ? stored.runtime : DEFAULT_SETTINGS.runtime,
             canvasUrl: typeof stored.canvasUrl === "string" ? stored.canvasUrl : DEFAULT_SETTINGS.canvasUrl,
+            proxyEnabled: typeof stored.proxyEnabled === "boolean" ? stored.proxyEnabled : DEFAULT_SETTINGS.proxyEnabled,
+            proxyHost: typeof stored.proxyHost === "string" ? stored.proxyHost.trim() : DEFAULT_SETTINGS.proxyHost,
+            proxyPort: validProxyPort(stored.proxyPort) ? Number(stored.proxyPort) : DEFAULT_SETTINGS.proxyPort,
+            proxyBypass: typeof stored.proxyBypass === "string" && stored.proxyBypass.trim() ? stored.proxyBypass.trim() : DEFAULT_SETTINGS.proxyBypass,
             startOnLaunch: stored.startOnLaunch !== false,
             autoRestart: stored.autoRestart !== false,
             minimizeToTray: stored.minimizeToTray !== false,
@@ -88,9 +109,96 @@ function saveSettings(next: ManagerSettings) {
     fs.writeFileSync(settingsFile(), JSON.stringify(next, null, 2));
 }
 
+async function readWindowsProxyValue(name: string, type: "dword"): Promise<number>;
+async function readWindowsProxyValue(name: string, type: "string"): Promise<string>;
+async function readWindowsProxyValue(name: string, type: "dword" | "string"): Promise<number | string> {
+    try {
+        const { stdout } = await execFileAsync("reg.exe", ["query", WINDOWS_INTERNET_SETTINGS_KEY, "/v", name], { windowsHide: true, encoding: "utf8" });
+        const line = String(stdout).split(/\r?\n/).find((item) => item.trim().startsWith(name));
+        if (!line) return type === "dword" ? 0 : "";
+        if (type === "dword") return Number.parseInt(line.match(/0x([0-9a-f]+)/i)?.[1] || "0", 16);
+        return line.match(/\s+REG_SZ\s*(.*)$/i)?.[1]?.trim() || "";
+    } catch {
+        return type === "dword" ? 0 : "";
+    }
+}
+
+async function readWindowsSystemProxy(): Promise<SystemProxyBackup> {
+    const [enabled, server, override] = await Promise.all([
+        readWindowsProxyValue("ProxyEnable", "dword"),
+        readWindowsProxyValue("ProxyServer", "string"),
+        readWindowsProxyValue("ProxyOverride", "string"),
+    ]);
+    return { enabled, server, override };
+}
+
+async function writeWindowsProxyValue(name: string, type: "REG_DWORD" | "REG_SZ", value: string | number) {
+    await execFileAsync("reg.exe", ["add", WINDOWS_INTERNET_SETTINGS_KEY, "/v", name, "/t", type, "/d", String(value), "/f"], { windowsHide: true });
+}
+
+async function notifyWindowsProxyChanged() {
+    const script = [
+        "$type = '[DllImport(\"wininet.dll\", SetLastError = true)] public static extern bool InternetSetOption(IntPtr hInternet, int dwOption, IntPtr lpBuffer, int dwBufferLength);'",
+        "$winInet = Add-Type -MemberDefinition $type -Name WinINet -Namespace Native -PassThru",
+        "[Native.WinINet]::InternetSetOption([IntPtr]::Zero, 39, [IntPtr]::Zero, 0) | Out-Null",
+        "[Native.WinINet]::InternetSetOption([IntPtr]::Zero, 37, [IntPtr]::Zero, 0) | Out-Null",
+    ].join("; ");
+    await execFileAsync("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", script], { windowsHide: true });
+}
+
+function windowsProxyOverride(value: string) {
+    const entries = new Set(["<local>"]);
+    for (const raw of value.split(",").map((item) => item.trim()).filter(Boolean)) {
+        if (raw === "192.168.0.0/16") entries.add("192.168.*");
+        else if (raw === "10.0.0.0/8") entries.add("10.*");
+        else if (raw === "172.16.0.0/12") {
+            for (let octet = 16; octet <= 31; octet += 1) entries.add(`172.${octet}.*`);
+        } else if (raw.startsWith(".")) entries.add(`*${raw}`);
+        else entries.add(raw);
+    }
+    return [...entries].join(";");
+}
+
+async function applyWindowsSystemProxy(settings: ManagerSettings) {
+    if (process.platform !== "win32") {
+        if (settings.proxyEnabled) throw new Error("系统代理设置仅支持 Windows");
+        return;
+    }
+    if (settings.proxyEnabled) {
+        if (!fs.existsSync(systemProxyBackupFile())) {
+            fs.mkdirSync(path.dirname(systemProxyBackupFile()), { recursive: true });
+            fs.writeFileSync(systemProxyBackupFile(), JSON.stringify(await readWindowsSystemProxy(), null, 2));
+        }
+        await writeWindowsProxyValue("ProxyServer", "REG_SZ", `${settings.proxyHost}:${settings.proxyPort}`);
+        await writeWindowsProxyValue("ProxyOverride", "REG_SZ", windowsProxyOverride(settings.proxyBypass));
+        await writeWindowsProxyValue("ProxyEnable", "REG_DWORD", 1);
+    } else {
+        let backup: SystemProxyBackup | null = null;
+        try {
+            backup = JSON.parse(fs.readFileSync(systemProxyBackupFile(), "utf8")) as SystemProxyBackup;
+        } catch {}
+        if (backup) {
+            await writeWindowsProxyValue("ProxyServer", "REG_SZ", backup.server);
+            await writeWindowsProxyValue("ProxyOverride", "REG_SZ", backup.override);
+            await writeWindowsProxyValue("ProxyEnable", "REG_DWORD", backup.enabled ? 1 : 0);
+        } else {
+            await writeWindowsProxyValue("ProxyEnable", "REG_DWORD", 0);
+        }
+        try {
+            fs.rmSync(systemProxyBackupFile(), { force: true });
+        } catch {}
+    }
+    await notifyWindowsProxyChanged();
+}
+
 function validPort(value: unknown) {
     const port = Number(value);
     return Number.isInteger(port) && port >= 1024 && port <= 65535;
+}
+
+function validProxyPort(value: unknown) {
+    const port = Number(value);
+    return Number.isInteger(port) && port >= 1 && port <= 65535;
 }
 
 function validRuntime(value: unknown): value is AgentRuntime {
@@ -114,10 +222,20 @@ function normalizeSettings(value: unknown): ManagerSettings {
         }
         if (!["http:", "https:"].includes(parsed.protocol)) throw new Error("Canvas 地址必须使用 http 或 https");
     }
+    const proxyEnabled = input.proxyEnabled === true;
+    const proxyHost = String(input.proxyHost || "").trim();
+    const proxyPort = Number(input.proxyPort);
+    if (proxyEnabled && !proxyHost) throw new Error("请填写 Agent 代理地址");
+    if (proxyHost && /[:/?#\s]/.test(proxyHost)) throw new Error("代理地址只填写 IP 或域名，不要包含协议和端口");
+    if (!validProxyPort(proxyPort)) throw new Error("代理端口必须在 1 到 65535 之间");
     return {
         port,
         runtime: input.runtime,
         canvasUrl,
+        proxyEnabled,
+        proxyHost,
+        proxyPort,
+        proxyBypass: String(input.proxyBypass || "").trim() || DEFAULT_SETTINGS.proxyBypass,
         startOnLaunch: input.startOnLaunch !== false,
         autoRestart: input.autoRestart !== false,
         minimizeToTray: input.minimizeToTray !== false,
@@ -214,6 +332,22 @@ function agentWorkingDirectory() {
     return path.dirname(path.dirname(agentEntry()));
 }
 
+function agentEnvironment(settings: ManagerSettings) {
+    const env = { ...process.env };
+    for (const key of PROXY_ENV_KEYS) delete env[key];
+    if (!settings.proxyEnabled) return env;
+    const proxyUrl = `http://${settings.proxyHost}:${settings.proxyPort}`;
+    env.HTTP_PROXY = proxyUrl;
+    env.HTTPS_PROXY = proxyUrl;
+    env.ALL_PROXY = proxyUrl;
+    env.http_proxy = proxyUrl;
+    env.https_proxy = proxyUrl;
+    env.all_proxy = proxyUrl;
+    env.NO_PROXY = settings.proxyBypass;
+    env.no_proxy = settings.proxyBypass;
+    return env;
+}
+
 /** 精简版安装包不含 DeepSeek Harness，需要同时检查打包与开发两种依赖布局。 */
 function dshAvailable() {
     const root = agentWorkingDirectory();
@@ -270,10 +404,11 @@ async function startAgentOnce() {
     status = "starting";
     lastError = "";
     appendLog(`启动 Canvas Agent，端口 ${settings.port}，后端 ${settings.runtime}`);
+    appendLog(settings.proxyEnabled ? `Agent 网络代理：${settings.proxyHost}:${settings.proxyPort}` : "Agent 网络代理已关闭");
     const child = spawn(process.execPath, [entry], {
         cwd: agentWorkingDirectory(),
         env: {
-            ...process.env,
+            ...agentEnvironment(settings),
             ELECTRON_RUN_AS_NODE: "1",
             PORT: String(settings.port),
             CANVAS_AGENT_RUNTIME: settings.runtime,
@@ -554,9 +689,22 @@ function registerIpc() {
     ipcMain.handle("manager:stop", async () => stopAgent());
     ipcMain.handle("manager:restart", async () => restartAgent());
     ipcMain.handle("manager:save-settings", async (_event, value: unknown) => {
-        const next = normalizeSettings(value);
+        const next = normalizeSettings({ ...loadSettings(), ...(value && typeof value === "object" ? value : {}) });
         saveSettings(next);
         configureLoginItem(next);
+        if (agentProcess) await restartAgent();
+        else publish();
+        return snapshot();
+    });
+    ipcMain.handle("manager:set-proxy", async (_event, value: unknown) => {
+        const input = value && typeof value === "object" && !Array.isArray(value) ? value as Partial<ManagerSettings> : {};
+        const current = loadSettings();
+        const enabled = input.proxyEnabled === true;
+        const next = normalizeSettings(enabled
+            ? { ...current, ...input, proxyEnabled: true }
+            : { ...current, proxyEnabled: false });
+        await applyWindowsSystemProxy(next);
+        saveSettings(next);
         if (agentProcess) await restartAgent();
         else publish();
         return snapshot();
@@ -584,8 +732,17 @@ if (!lock) {
         registerIpc();
         createWindow();
         createTray();
-        configureLoginItem(loadSettings());
-        if (loadSettings().startOnLaunch && !process.argv.includes("--skip-autostart")) {
+        const settings = loadSettings();
+        if (settings.proxyEnabled) {
+            try {
+                await applyWindowsSystemProxy(settings);
+            } catch (error) {
+                lastError = error instanceof Error ? error.message : String(error);
+                appendLog(`系统代理应用失败：${lastError}`);
+            }
+        }
+        configureLoginItem(settings);
+        if (settings.startOnLaunch && !process.argv.includes("--skip-autostart")) {
             await startAgent();
         }
     });

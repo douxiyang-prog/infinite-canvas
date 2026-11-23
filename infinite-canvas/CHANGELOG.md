@@ -2,6 +2,12 @@
 
 ## Unreleased
 
++ [新增] Canvas Agent Manager 新增代理开关，可填写地址、端口和直连域名；启用后同时设置 Windows 系统代理并向 Agent 子进程注入 `HTTP_PROXY` / `HTTPS_PROXY` / `NO_PROXY`，关闭时恢复原有系统代理并清除继承的代理环境变量。
++ [调整] Canvas Agent Manager 新配置默认启用 `192.168.1.65:3333` 代理；Manager 启动时自动应用 Windows 系统代理，用户手动关闭后仍保留关闭状态。
++ [调整] Canvas Agent Manager 将代理改为独立卡片和“打开代理/关闭代理”按钮，不再依赖 Agent 配置保存；Agent 停止时也可直接控制系统代理，运行时切换会自动重启 Agent 同步环境变量。
++ [修复] Canvas 部署 Nginx 新增 `/provider/v1beta/` 同源代理，使本地 New API 的 Gemini 图像模型可以通过 `Gemini + /provider` 正常调用 `:generateContent`，并继续转发 Bearer 与 `x-goog-api-key` 认证头。
++ [修复] 自定义 Gemini 网关使用 New API Key 时，请求会同时发送 Bearer 认证，兼容 100Best 等原生 Gemini 渠道；官方 Google Gemini 地址仍仅使用 `x-goog-api-key`。
+
 + [修复] Canvas Agent Manager Lite 在安装版中启动 Codex 时，Canvas MCP 子进程没有继承 Electron 的 Node 模式，导致 `infinite-canvas` 握手失败；现在会显式注入 `ELECTRON_RUN_AS_NODE=1`，恢复画布工具连接。
 + [修复] Codex 切换到旧 DeepSeek Harness 活动会话时会把 `dsh-...` 当成 Codex 线程 ID，导致对话初始化失败；现会在启动和恢复入口清理不兼容 ID 并自动新建 Codex 对话，同时让 Windows 直接启动原生 `codex.exe`，避免弹出空白控制台窗口。
 + [新增] Canvas Agent Manager Lite 版内置最新版 Codex 并新增 Codex 后端选项：保存设置后自动重启 Agent；Codex 使用现有模型与 API Key，并自动注入 Canvas MCP，可读取和修改当前网页画布、管理 Skill，同时继续排除体积较大的 DeepSeek Harness。

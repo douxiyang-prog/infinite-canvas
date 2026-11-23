@@ -32,7 +32,7 @@
     </section>
 
     <div class="grid">
-      <section class="card">
+      <section class="card connection-card">
         <div class="card-title">
           <div>
             <span class="label">连接信息</span>
@@ -50,7 +50,29 @@
         <button id="open-canvas" class="button wide">打开 Canvas</button>
       </section>
 
-      <section class="card">
+      <section class="card proxy-card">
+        <div class="card-title">
+          <div>
+            <span class="label">网络出口</span>
+            <h2>代理独立控制</h2>
+          </div>
+          <span id="proxy-status" class="proxy-status disabled">已关闭</span>
+        </div>
+        <label for="proxy-host">代理地址和端口</label>
+        <div class="field-row">
+          <input id="proxy-host" type="text" placeholder="192.168.1.65" aria-label="代理地址">
+          <input id="proxy-port" type="number" min="1" max="65535" value="3333" aria-label="代理端口">
+        </div>
+        <label for="proxy-bypass">直连地址和域名</label>
+        <input id="proxy-bypass" type="text" placeholder="localhost,127.0.0.1,192.168.0.0/16">
+        <p class="field-hint">独立设置 Windows 系统代理，并同步给正在运行的 Agent；关闭时恢复原有系统代理。</p>
+        <div class="proxy-actions">
+          <button id="proxy-enable" class="button primary">打开代理</button>
+          <button id="proxy-disable" class="button danger">关闭代理</button>
+        </div>
+      </section>
+
+      <section class="card settings-card">
         <div class="card-title">
           <div>
             <span class="label">运行设置</span>
