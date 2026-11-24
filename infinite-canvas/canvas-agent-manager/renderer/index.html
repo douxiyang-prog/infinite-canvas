@@ -91,6 +91,23 @@
         </select>
         <label for="canvas-url">Canvas 地址</label>
         <input id="canvas-url" type="url" placeholder="http://192.168.1.68">
+        <label for="codex-provider">Codex Key 来源</label>
+        <select id="codex-provider">
+          <option value="deepseek">DeepSeek 官方</option>
+          <option value="best100">100Best</option>
+          <option value="openai">OpenAI 官方</option>
+        </select>
+        <label for="codex-base-url">Codex Base URL</label>
+        <input id="codex-base-url" type="url" placeholder="https://api.deepseek.com/">
+        <label for="codex-model">Codex 模型</label>
+        <input id="codex-model" type="text" list="codex-model-options" placeholder="deepseek-flash">
+        <datalist id="codex-model-options">
+          <option value="deepseek-flash"></option>
+          <option value="gpt-6-astra"></option>
+        </datalist>
+        <label for="codex-api-key">Codex API Key</label>
+        <input id="codex-api-key" type="password" autocomplete="new-password" placeholder="留空保留当前 Key">
+        <p class="field-hint">保存时写入 ~/.codex/config.toml，并保留一份 .canvas-agent-manager.bak。Codex 0.171 使用 Responses API。</p>
         <div class="checks">
           <label class="check"><input id="start-on-launch" type="checkbox"> 登录 Windows 后自动启动 Agent</label>
           <label class="check"><input id="auto-restart" type="checkbox"> 异常退出后自动重启</label>

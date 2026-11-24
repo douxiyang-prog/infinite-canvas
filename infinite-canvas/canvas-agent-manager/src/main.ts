@@ -10,6 +10,7 @@ import { app, BrowserWindow, clipboard, ipcMain, Menu, nativeImage, shell, Tray 
 type AgentRuntime = "canvas" | "codex" | "dsh" | "ark";
 type AgentStatus = "stopped" | "starting" | "running" | "stopping" | "error";
 type AgentChild = ChildProcessByStdio<null, Readable, Readable>;
+type CodexProvider = "deepseek" | "best100" | "openai";
 
 type ManagerSettings = {
     port: number;
@@ -19,6 +20,9 @@ type ManagerSettings = {
     proxyHost: string;
     proxyPort: number;
     proxyBypass: string;
+    codexProvider: CodexProvider;
+    codexBaseUrl: string;
+    codexModel: string;
     startOnLaunch: boolean;
     autoRestart: boolean;
     minimizeToTray: boolean;
@@ -60,6 +64,9 @@ const DEFAULT_SETTINGS: ManagerSettings = {
     proxyHost: "192.168.1.65",
     proxyPort: 3333,
     proxyBypass: "localhost,127.0.0.1,::1,192.168.0.0/16,10.0.0.0/8,172.16.0.0/12,ark.cn-beijing.volces.com,api.deepseek.com,api-beijing.klingai.com,.volces.com,.deepseek.com,.klingai.com",
+    codexProvider: "deepseek",
+    codexBaseUrl: "https://api.deepseek.com/",
+    codexModel: "deepseek-flash",
     startOnLaunch: true,
     autoRestart: true,
     minimizeToTray: true,
@@ -81,6 +88,7 @@ let logs: string[] = [];
 
 const settingsFile = () => path.join(app.getPath("userData"), "manager-settings.json");
 const systemProxyBackupFile = () => path.join(app.getPath("userData"), "system-proxy-backup.json");
+const codexConfigFile = () => path.join(app.getPath("home"), ".codex", "config.toml");
 const agentConfigDir = () => path.join(app.getPath("home"), ".infinite-canvas");
 const agentConfigFile = () => path.join(agentConfigDir(), "canvas-agent.json");
 
@@ -95,6 +103,9 @@ function loadSettings(): ManagerSettings {
             proxyHost: typeof stored.proxyHost === "string" ? stored.proxyHost.trim() : DEFAULT_SETTINGS.proxyHost,
             proxyPort: validProxyPort(stored.proxyPort) ? Number(stored.proxyPort) : DEFAULT_SETTINGS.proxyPort,
             proxyBypass: typeof stored.proxyBypass === "string" && stored.proxyBypass.trim() ? stored.proxyBypass.trim() : DEFAULT_SETTINGS.proxyBypass,
+            codexProvider: validCodexProvider(stored.codexProvider) ? stored.codexProvider : DEFAULT_SETTINGS.codexProvider,
+            codexBaseUrl: typeof stored.codexBaseUrl === "string" ? stored.codexBaseUrl.trim() : DEFAULT_SETTINGS.codexBaseUrl,
+            codexModel: typeof stored.codexModel === "string" ? stored.codexModel.trim() : DEFAULT_SETTINGS.codexModel,
             startOnLaunch: stored.startOnLaunch !== false,
             autoRestart: stored.autoRestart !== false,
             minimizeToTray: stored.minimizeToTray !== false,
@@ -191,6 +202,91 @@ async function applyWindowsSystemProxy(settings: ManagerSettings) {
     await notifyWindowsProxyChanged();
 }
 
+function validCodexProvider(value: unknown): value is CodexProvider {
+    return value === "deepseek" || value === "best100" || value === "openai";
+}
+
+function tomlString(value: string) {
+    return JSON.stringify(value);
+}
+
+function escapeRegExp(value: string) {
+    return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function replaceRootTomlValue(text: string, key: string, value: string) {
+    const firstSection = text.search(/^\s*\[/m);
+    const head = firstSection >= 0 ? text.slice(0, firstSection) : text;
+    const tail = firstSection >= 0 ? text.slice(firstSection) : "";
+    const pattern = new RegExp(`^(\\s*)${escapeRegExp(key)}\\s*=.*$`, "m");
+    const next = pattern.test(head) ? head.replace(pattern, `$1${key} = ${value}`) : `${head.replace(/\s*$/, "")}\n${key} = ${value}\n`;
+    return `${next}${tail}`;
+}
+
+function removeRootTomlValue(text: string, key: string) {
+    const firstSection = text.search(/^\s*\[/m);
+    const head = firstSection >= 0 ? text.slice(0, firstSection) : text;
+    const tail = firstSection >= 0 ? text.slice(firstSection) : "";
+    return `${head.replace(new RegExp(`^\\s*${escapeRegExp(key)}\\s*=.*(?:\\r?\\n)?`, "m"), "")}${tail}`;
+}
+
+function providerSectionRange(text: string, provider: CodexProvider) {
+    const header = new RegExp(`^\\s*\\[model_providers\\.${escapeRegExp(provider)}\\]\\s*$`, "m").exec(text);
+    if (!header || header.index === undefined) return null;
+    const afterHeader = header.index + header[0].length;
+    const next = /^\s*\[/m.exec(text.slice(afterHeader));
+    return { start: header.index, end: next ? afterHeader + next.index : text.length };
+}
+
+async function writeCodexConfig(settings: ManagerSettings, apiKey: string) {
+    const file = codexConfigFile();
+    let text = "";
+    try {
+        text = fs.readFileSync(file, "utf8");
+    } catch {}
+    let token = apiKey.trim();
+    const currentRange = providerSectionRange(text, settings.codexProvider);
+    if (!token && currentRange) {
+        const section = text.slice(currentRange.start, currentRange.end);
+        const match = section.match(/^\s*experimental_bearer_token\s*=\s*("(?:\\.|[^"\\])*")/m);
+        if (match) {
+            try {
+                token = String(JSON.parse(match[1]));
+            } catch {}
+        }
+    }
+    if (!token) throw new Error("请输入 Codex API Key");
+    let baseUrl: URL;
+    try {
+        baseUrl = new URL(settings.codexBaseUrl);
+    } catch {
+        throw new Error("Codex Base URL 格式无效");
+    }
+    if (!["http:", "https:"].includes(baseUrl.protocol)) throw new Error("Codex Base URL 必须使用 http 或 https");
+    if (!settings.codexModel) throw new Error("请填写 Codex 模型");
+    const providerName = settings.codexProvider === "deepseek" ? "DeepSeek" : settings.codexProvider === "best100" ? "100Best" : "OpenAI";
+    const section = [
+        `[model_providers.${settings.codexProvider}]`,
+        `name = ${tomlString(providerName)}`,
+        `base_url = ${tomlString(settings.codexBaseUrl)}`,
+        `wire_api = "responses"`,
+        `experimental_bearer_token = ${tomlString(token)}`,
+        "",
+    ].join("\n");
+    let next = replaceRootTomlValue(text, "model", tomlString(settings.codexModel));
+    next = replaceRootTomlValue(next, "model_provider", tomlString(settings.codexProvider));
+    next = replaceRootTomlValue(next, "forced_login_method", '"api"');
+    next = removeRootTomlValue(next, "preferred_auth_method");
+    const range = providerSectionRange(next, settings.codexProvider);
+    next = range ? `${next.slice(0, range.start)}${section}${next.slice(range.end)}` : `${next.replace(/\s*$/, "")}\n\n${section}`;
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    const backup = `${file}.canvas-agent-manager.bak`;
+    if (fs.existsSync(file)) fs.copyFileSync(file, backup);
+    const temp = `${file}.${process.pid}.tmp`;
+    fs.writeFileSync(temp, next, { mode: 0o600 });
+    fs.renameSync(temp, file);
+}
+
 function validPort(value: unknown) {
     const port = Number(value);
     return Number.isInteger(port) && port >= 1024 && port <= 65535;
@@ -228,6 +324,16 @@ function normalizeSettings(value: unknown): ManagerSettings {
     if (proxyEnabled && !proxyHost) throw new Error("请填写 Agent 代理地址");
     if (proxyHost && /[:/?#\s]/.test(proxyHost)) throw new Error("代理地址只填写 IP 或域名，不要包含协议和端口");
     if (!validProxyPort(proxyPort)) throw new Error("代理端口必须在 1 到 65535 之间");
+    if (!validCodexProvider(input.codexProvider)) throw new Error("Codex Provider 无效");
+    const codexBaseUrl = String(input.codexBaseUrl || "").trim();
+    try {
+        const parsed = new URL(codexBaseUrl);
+        if (!["http:", "https:"].includes(parsed.protocol)) throw new Error();
+    } catch {
+        throw new Error("Codex Base URL 必须使用 http 或 https");
+    }
+    const codexModel = String(input.codexModel || "").trim();
+    if (!codexModel) throw new Error("请填写 Codex 模型");
     return {
         port,
         runtime: input.runtime,
@@ -236,6 +342,9 @@ function normalizeSettings(value: unknown): ManagerSettings {
         proxyHost,
         proxyPort,
         proxyBypass: String(input.proxyBypass || "").trim() || DEFAULT_SETTINGS.proxyBypass,
+        codexProvider: input.codexProvider,
+        codexBaseUrl,
+        codexModel,
         startOnLaunch: input.startOnLaunch !== false,
         autoRestart: input.autoRestart !== false,
         minimizeToTray: input.minimizeToTray !== false,
@@ -689,7 +798,9 @@ function registerIpc() {
     ipcMain.handle("manager:stop", async () => stopAgent());
     ipcMain.handle("manager:restart", async () => restartAgent());
     ipcMain.handle("manager:save-settings", async (_event, value: unknown) => {
-        const next = normalizeSettings({ ...loadSettings(), ...(value && typeof value === "object" ? value : {}) });
+        const input = value && typeof value === "object" && !Array.isArray(value) ? value as Partial<ManagerSettings> & { codexApiKey?: string } : {};
+        const next = normalizeSettings({ ...loadSettings(), ...input });
+        if (next.runtime === "codex") await writeCodexConfig(next, String(input.codexApiKey || ""));
         saveSettings(next);
         configureLoginItem(next);
         if (agentProcess) await restartAgent();

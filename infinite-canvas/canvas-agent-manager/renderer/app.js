@@ -8,6 +8,10 @@ const elements = {
   port: document.querySelector("#port"),
   runtime: document.querySelector("#runtime"),
   canvasUrl: document.querySelector("#canvas-url"),
+  codexProvider: document.querySelector("#codex-provider"),
+  codexBaseUrl: document.querySelector("#codex-base-url"),
+  codexModel: document.querySelector("#codex-model"),
+  codexApiKey: document.querySelector("#codex-api-key"),
   proxyHost: document.querySelector("#proxy-host"),
   proxyPort: document.querySelector("#proxy-port"),
   proxyBypass: document.querySelector("#proxy-bypass"),
@@ -73,6 +77,10 @@ function render(state) {
   codexOption.disabled = !state.components?.codex;
   elements.runtime.value = state.settings.runtime;
   elements.canvasUrl.value = state.settings.canvasUrl;
+  elements.codexProvider.value = state.settings.codexProvider;
+  elements.codexBaseUrl.value = state.settings.codexBaseUrl;
+  elements.codexModel.value = state.settings.codexModel;
+  elements.codexApiKey.value = "";
   elements.proxyHost.value = state.settings.proxyHost;
   elements.proxyPort.value = state.settings.proxyPort;
   elements.proxyBypass.value = state.settings.proxyBypass;
@@ -119,10 +127,28 @@ elements.restartButton.addEventListener("click", () => {
   elements.restartButton.disabled = true;
   void run(() => window.manager.restart(), "Canvas Agent 已重启");
 });
+const codexProviderPresets = {
+  deepseek: { baseUrl: "https://api.deepseek.com/", model: "deepseek-flash" },
+  best100: { baseUrl: "https://api.100b.best/v1", model: "gpt-6-astra" },
+  openai: { baseUrl: "https://api.openai.com/v1", model: "gpt-6-astra" },
+};
+
+elements.codexProvider.addEventListener("change", () => {
+  const preset = codexProviderPresets[elements.codexProvider.value];
+  if (!preset) return;
+  elements.codexBaseUrl.value = preset.baseUrl;
+  elements.codexModel.value = preset.model;
+  elements.codexApiKey.focus();
+});
+
 elements.saveButton.addEventListener("click", () => run(() => window.manager.saveSettings({
   port: Number(elements.port.value),
   runtime: elements.runtime.value,
   canvasUrl: elements.canvasUrl.value,
+  codexProvider: elements.codexProvider.value,
+  codexBaseUrl: elements.codexBaseUrl.value,
+  codexModel: elements.codexModel.value,
+  codexApiKey: elements.codexApiKey.value,
   startOnLaunch: elements.startOnLaunch.checked,
   autoRestart: elements.autoRestart.checked,
   minimizeToTray: elements.minimizeToTray.checked,
