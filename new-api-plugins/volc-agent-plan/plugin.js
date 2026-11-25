@@ -22,6 +22,18 @@ const DEFAULT_VIDEO_PROFILE = { resolutions: SEEDANCE_RESOLUTIONS, maxDuration: 
 // reference and were confirmed by live 400s; background marks the models whose
 // documented transparency combination rules are enforced locally.
 const IMAGE_MODELS = {
+  "doubao-seedream-5-5-261028": {
+    presets: ["1K", "1.5K", "2K"],
+    minPixels: 921600,
+    maxPixels: 4624220,
+    maxReferenceImages: 10,
+    sequential: false,
+    layers: true,
+    outputFormat: true,
+    background: true,
+    tools: false,
+    fastPromptMode: false,
+  },
   "doubao-seedream-5-0-pro-260628": {
     presets: ["1K", "1.5K", "2K"],
     minPixels: 921600,
@@ -96,6 +108,9 @@ const IMAGE_MODELS = {
   },
 };
 const IMAGE_RESOLUTIONS = ["1K", "1.5K", "2K", "3K", "4K"];
+const AGENT_PLAN_IMAGE_MODELS = {
+  "doubao-seedream-5-5-261028": IMAGE_MODELS["doubao-seedream-5-5-261028"],
+};
 // Square pixel area of each preset, used only for the submit-time tier estimate.
 const IMAGE_PRESET_PIXELS = { "1K": 1048576, "1.5K": 2359296, "2K": 4194304, "3K": 9437184, "4K": 16777216 };
 // Endpoint IDs and newer models reach the image route without a profile; accept every documented option.
@@ -306,26 +321,31 @@ export const meta = {
     en: "Seedance video generation through the Volcengine Ark Agent Plan endpoint (/api/plan/v3)",
     zh: "通过火山方舟 Agent Plan 专属接口（/api/plan/v3）生成 Seedance 视频",
   },
-  version: "1.0.1",
+  version: "1.0.4",
   author: { name: "canvas" },
   baseUrl: "https://ark.cn-beijing.volces.com",
-  models: Object.keys(VIDEO_MODELS),
+  models: [...Object.keys(VIDEO_MODELS), ...Object.keys(AGENT_PLAN_IMAGE_MODELS)],
   fetchMode: "per_task",
   upstreams: ["vendor"],
-  submitResponseTypes: ["json"],
+  submitResponseTypes: ["json", "sse"],
   requiredCapabilities: ["duration-auto@1"],
   usageSchema: seedanceUsageSchema(DEFAULT_VIDEO_PROFILE),
   usageExamples: seedanceUsageExamples(DEFAULT_VIDEO_PROFILE),
-  usageProfiles: capabilityUsageProfiles(VIDEO_MODELS, seedanceUsageSchema, seedanceUsageExamples),
+  usageProfiles: [
+    ...capabilityUsageProfiles(VIDEO_MODELS, seedanceUsageSchema, seedanceUsageExamples),
+    ...capabilityUsageProfiles(AGENT_PLAN_IMAGE_MODELS, seedreamUsageSchema, seedreamUsageExamples),
+  ],
   // Uploaded plugins may not use the reserved /api namespace, so the Agent
   // Plan paths are served under the plugin's own /volcplan prefix.
   routes: [
     { method: "POST", path: "/volcplan/api/plan/v3/contents/generations/tasks", type: "submit", decode: "createTask", render: "taskCreated" },
     { method: "GET", path: "/volcplan/api/plan/v3/contents/generations/tasks/:task_id", type: "query", render: "taskStatus" },
+    { method: "POST", path: "/volcplan/api/plan/v3/images/generations", type: "submit", decode: "createImage", render: "imageCreated", retainResult: false },
   ],
   protocols: [
     { name: "openai_responses", supports: ["stream", "sync", "background"] },
     { name: "openai_video", models: Object.keys(VIDEO_MODELS) },
+    { name: "openai_image", models: Object.keys(AGENT_PLAN_IMAGE_MODELS) },
   ],
 };
 
@@ -1198,12 +1218,6 @@ export const protocols = {
     },
   },
 };
-
-// Agent Plan serves video here; the Seedream image handlers inherited from the
-// Ark plugin are not claimed.
-delete protocols.openai_image;
-delete native.createImage;
-delete native.imageCreated;
 
 const legacyRenderers = {
   openai_video: function (task) {

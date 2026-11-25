@@ -2,8 +2,10 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+    CODEX_CANVAS_PROVIDER_ID,
     chatCompletionsUrl,
     clearCanvasChannelConfig,
+    codexCanvasProviderConfig,
     publicChannelConfig,
     runCanvasChannelTurn,
     setCanvasChannelConfig,
@@ -36,6 +38,35 @@ test("Canvas channel keeps the API key private", () => {
             model: "doubao-seed-2.1-pro",
             hasApiKey: true,
         });
+    } finally {
+        clearCanvasChannelConfig();
+    }
+});
+
+test("Codex uses the selected Canvas text model through a thread-level provider", () => {
+    setCanvasChannelConfig({
+        channelId: "channel-1",
+        channelName: "New API",
+        baseUrl: "https://example.com/v1/",
+        apiKey: "sk-secret",
+        model: "deepseek-flash",
+    });
+    try {
+        const config = codexCanvasProviderConfig();
+        assert.deepEqual(config, {
+            model: "deepseek-flash",
+            model_provider: CODEX_CANVAS_PROVIDER_ID,
+            forced_login_method: "api",
+            model_providers: {
+                [CODEX_CANVAS_PROVIDER_ID]: {
+                    name: "Canvas - New API",
+                    base_url: "https://example.com/v1",
+                    wire_api: "responses",
+                    experimental_bearer_token: "sk-secret",
+                },
+            },
+        });
+        assert.equal(JSON.stringify(publicChannelConfig()).includes("sk-secret"), false);
     } finally {
         clearCanvasChannelConfig();
     }

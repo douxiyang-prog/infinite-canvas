@@ -1,10 +1,13 @@
 import { Parser } from "expr-eval";
 
+import { inferMediaRatio, inferMediaScale, readMediaDimensions } from "@/lib/media-size";
 import { buildVideoBillingUsage, type VideoBillingUsage } from "@/lib/video-generation-estimate";
 import { modelOptionName, type AiConfig } from "@/stores/use-config-store";
 import type { CanvasGenerationMode } from "@/types/canvas";
 
 type PricingVariant = {
+    plugin_key?: string;
+    plugin_name?: string;
     billing_expr?: string;
 };
 
@@ -20,6 +23,7 @@ export type GenerationCostEstimate = {
     unit: number;
     imageCount: number;
     currency: "CNY" | "USD";
+    source?: string;
     usage?: Pick<VideoBillingUsage, "seconds" | "resolution" | "automatic">;
 };
 
@@ -28,10 +32,11 @@ type GenerationCostRequest = {
     mode: CanvasGenerationMode;
     count: number;
     hasVideoReference?: boolean;
+    referenceImageCount?: number;
     signal: AbortSignal;
 };
 
-export async function fetchGenerationCost({ config, mode, count, hasVideoReference = false, signal }: GenerationCostRequest): Promise<GenerationCostEstimate | null> {
+export async function fetchGenerationCost({ config, mode, count, hasVideoReference = false, referenceImageCount = 0, signal }: GenerationCostRequest): Promise<GenerationCostEstimate | null> {
     const channelBaseUrl = config.baseUrl.trim();
     if (!channelBaseUrl || !config.apiKey.trim()) return null;
 
@@ -47,35 +52,66 @@ export async function fetchGenerationCost({ config, mode, count, hasVideoReferen
 
     const imageCount = Math.max(1, Math.floor(count));
     const videoUsage = mode === "video" ? buildVideoBillingUsage(config, hasVideoReference) : undefined;
-    const usage: Record<string, unknown> = videoUsage
-        ? { ...videoUsage }
-        : {
-              image_count: 1,
-              n: 1,
-          };
+    const usage: Record<string, unknown> = videoUsage || imageBillingUsage(config, imageCount, referenceImageCount);
+    const pluginPricing = pluginPricingEstimate(modelPricing, usage, videoUsage);
     const expressions = pricingExpressions(modelPricing);
-    let unitUsd = expressions.map((expression) => evaluateBillingExpression(expression, usage, videoUsage)).find((value): value is number => value !== null);
-    if (unitUsd === undefined) {
-        const fixedMatch = expressions.map((expression) => expression.match(/fixed\(\s*([0-9.]+)\s*\)/i)).find(Boolean);
-        unitUsd = fixedMatch ? Number(fixedMatch[1]) : undefined;
+    let totalUsd = pluginPricing?.totalUsd;
+    if (totalUsd === undefined) {
+        let unitUsd = expressions.map((expression) => evaluateBillingExpression(expression, usage, videoUsage)).find((value): value is number => value !== null);
+        if (unitUsd === undefined) {
+            const fixedMatch = expressions.map((expression) => expression.match(/fixed\(\s*([0-9.]+)\s*\)/i)).find(Boolean);
+            unitUsd = fixedMatch ? Number(fixedMatch[1]) : undefined;
+        }
+        if (unitUsd === undefined && !expressions.length && Number.isFinite(modelPricing.model_price) && Number(modelPricing.model_price) >= 0) {
+            unitUsd = Number(modelPricing.model_price);
+        }
+        if (unitUsd === undefined || !Number.isFinite(unitUsd) || unitUsd < 0) return null;
+        totalUsd = unitUsd * (mode === "image" ? imageCount : 1);
     }
-    if (unitUsd === undefined && !expressions.length && Number.isFinite(modelPricing.model_price) && Number(modelPricing.model_price) >= 0) {
-        unitUsd = Number(modelPricing.model_price);
-    }
-    if (unitUsd === undefined || !Number.isFinite(unitUsd) || unitUsd < 0) return null;
 
     const displayType = String(site?.data?.quota_display_type || "CNY").toUpperCase();
     const exchangeRate = Number(site?.data?.usd_exchange_rate || 7.3);
     const currency = displayType === "USD" ? "USD" : "CNY";
     const multiplier = currency === "CNY" ? exchangeRate : 1;
-    const unit = unitUsd * multiplier;
-    const total = unit * (mode === "image" ? imageCount : 1);
+    const total = totalUsd * multiplier;
+    const unit = total / (mode === "image" ? imageCount : 1);
     return {
         unit,
         total,
         imageCount,
         currency,
+        ...(pluginPricing?.source ? { source: pluginPricing.source } : {}),
         ...(videoUsage ? { usage: { seconds: videoUsage.seconds, resolution: videoUsage.resolution, automatic: videoUsage.automatic } } : {}),
+    };
+}
+
+function pluginPricingEstimate(pricing: ModelPricing, usage: Record<string, unknown>, videoUsage?: VideoBillingUsage) {
+    for (const variant of pricing.billing_plugin_variants || []) {
+        const expression = variant.billing_expr?.trim();
+        if (!expression) continue;
+        const totalUsd = evaluateBillingExpression(expression, usage, videoUsage);
+        if (totalUsd === null) continue;
+        return {
+            totalUsd,
+            source: variant.plugin_name || variant.plugin_key || "task plugin",
+        };
+    }
+    return null;
+}
+
+function imageBillingUsage(config: AiConfig, count: number, referenceImageCount: number) {
+    const scale = inferMediaScale(config.size);
+    const ratio = inferMediaRatio(config.size);
+    const dimensions = readMediaDimensions(config.size, scale === "auto" ? "1k" : scale, ratio === "auto" ? "1:1" : ratio);
+    const pixels = dimensions.width * dimensions.height;
+    const aboveTier = pixels === 0 || pixels > 2_610_000;
+    return {
+        image_count: count,
+        n: count,
+        images_up_to_1_5k: aboveTier ? 0 : count,
+        images_above_1_5k: aboveTier ? count : 0,
+        input_images: Math.max(0, Math.floor(referenceImageCount)),
+        layer_decomposition: false,
     };
 }
 
@@ -95,7 +131,7 @@ function evaluateBillingExpression(expression: string, usage: Record<string, unk
             size: videoUsage?.resolution,
         };
         parser.functions = {
-            u: (name) => usage[String(name)] ?? null,
+            u: (name) => (Object.hasOwn(usage, String(name)) ? usage[String(name)] : Number.NaN),
             tier: (_name, value) => value,
             fixed: (value) => value,
             param: (path) => readPath(requestBody, String(path)),

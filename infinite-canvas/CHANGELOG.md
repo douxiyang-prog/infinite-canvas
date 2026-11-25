@@ -2,6 +2,8 @@
 
 ## Unreleased
 
++ [修复] 画布费用预估优先读取任务插件计费表达式，并按当前输出尺寸和参考图数量计算 Doubao Seedream 的 1.5K 上下档位；插件无法计算时才回退到普通模型价格。
++ [新增] Codex 后端可直接使用 Canvas 中选中的文本渠道：在 Agent 连接面板选择渠道和模型后，Codex 通过线程级 provider 调用对应 Base URL 和 API Key，Key 仅保存在本机 Agent 进程内存，不写入 `~/.codex/config.toml`。
 + [新增] Canvas Agent Manager 新增代理开关，可填写地址、端口和直连域名；启用后同时设置 Windows 系统代理并向 Agent 子进程注入 `HTTP_PROXY` / `HTTPS_PROXY` / `NO_PROXY`，关闭时恢复原有系统代理并清除继承的代理环境变量。
 + [调整] Canvas Agent Manager 新配置默认启用 `192.168.1.65:3333` 代理；Manager 启动时自动应用 Windows 系统代理，用户手动关闭后仍保留关闭状态。
 + [调整] Canvas Agent Manager 将代理改为独立卡片和“打开代理/关闭代理”按钮，不再依赖 Agent 配置保存；Agent 停止时也可直接控制系统代理，运行时切换会自动重启 Agent 同步环境变量。

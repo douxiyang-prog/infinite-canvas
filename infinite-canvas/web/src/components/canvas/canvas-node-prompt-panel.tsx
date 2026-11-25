@@ -198,7 +198,13 @@ export function CanvasNodePromptPanel({
                 </div>
             </div>
             <div className="mt-1 flex min-w-0 justify-end">
-                <NewApiGenerationCost config={config} mode={mode} count={Number(config.count) || 1} hasVideoReference={mentionReferences.some((reference) => reference.kind === "video")} />
+                <NewApiGenerationCost
+                    config={config}
+                    mode={mode}
+                    count={Number(config.count) || 1}
+                    hasVideoReference={mentionReferences.some((reference) => reference.kind === "video")}
+                    referenceImageCount={mentionReferences.filter((reference) => reference.kind === "image").length}
+                />
             </div>
             <Modal title={t("canvas.promptPanel.editorTitle")} open={expanded} centered width={760} footer={null} onCancel={() => setExpanded(false)} destroyOnHidden>
                 <div data-canvas-no-zoom className="pt-2" onWheelCapture={(event) => event.stopPropagation()}>

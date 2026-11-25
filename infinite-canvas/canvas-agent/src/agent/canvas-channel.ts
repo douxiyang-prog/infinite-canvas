@@ -29,6 +29,8 @@ type CanvasChannelRunInput = {
 let channelConfig: CanvasChannelConfig | null = null;
 let activeController: AbortController | null = null;
 
+export const CODEX_CANVAS_PROVIDER_ID = "canvas_channel";
+
 export function setCanvasChannelConfig(value: CanvasChannelConfig) {
     const config = normalizeChannelConfig(value);
     channelConfig = config;
@@ -53,6 +55,24 @@ export function canvasChannelModels() {
         ],
         isDefault: true,
     }];
+}
+
+/** 让 Codex 的模型请求复用 Canvas 文本渠道，同时只把凭证放在本机进程内存中。 */
+export function codexCanvasProviderConfig() {
+    if (!channelConfig) return null;
+    return {
+        model: channelConfig.model,
+        model_provider: CODEX_CANVAS_PROVIDER_ID,
+        forced_login_method: "api",
+        model_providers: {
+            [CODEX_CANVAS_PROVIDER_ID]: {
+                name: `Canvas - ${channelConfig.channelName}`,
+                base_url: channelConfig.baseUrl,
+                wire_api: "responses",
+                experimental_bearer_token: channelConfig.apiKey,
+            },
+        },
+    };
 }
 
 export function publicChannelConfig() {

@@ -5,8 +5,8 @@ import express, { type NextFunction, type Request, type Response } from "express
 
 import { runClaudeTurn } from "../agent/claude.js";
 import { interruptArkNativeTurn, runArkNativeTurn } from "../agent/ark-native.js";
-import { canvasChannelModels, interruptCanvasChannelTurn, publicChannelConfig, runCanvasChannelTurn, setCanvasChannelConfig } from "../agent/canvas-channel.js";
-import { archiveCodexThread, CodexSkillLookupError, configureCodexSkill, generateCodexSkillDraft, interruptCodexTurn, isCodexThreadId, isRecoverableThreadError, listCodexModels, listCodexSkills, listCodexThreads, readCodexThread, resolveCodexApproval, resolveCodexSkill, resumeCodexThread, runCodexTurn, startCodexThread, summarizeCodexThread } from "../agent/codex.js";
+import { canvasChannelModels, clearCanvasChannelConfig, interruptCanvasChannelTurn, publicChannelConfig, runCanvasChannelTurn, setCanvasChannelConfig } from "../agent/canvas-channel.js";
+import { archiveCodexThread, CodexSkillLookupError, configureCodexSkill, generateCodexSkillDraft, interruptCodexTurn, isCodexThreadId, isRecoverableThreadError, listCodexModels, listCodexSkills, listCodexThreads, readCodexThread, reloadCodexApp, resolveCodexApproval, resolveCodexSkill, resumeCodexThread, runCodexTurn, startCodexThread, summarizeCodexThread } from "../agent/codex.js";
 import type { CodexReasoningEffort, CodexSkillSelector } from "../agent/codex-protocol.js";
 import { closeDshRuntime, createDshSession, deleteDshSession, dshInstalled, dshModels, dshRuntimeInfo, dshSessions, interruptDshTurn, listDshThreads, readDshSession, runDshTurn } from "../agent/deepseek.js";
 import { messageMetadataStore } from "../agent/message-metadata.js";
@@ -373,7 +373,28 @@ export function startHttpServer() {
         const workspace = ensureSiteWorkspace(config);
         res.json({ ok: true, workspace, conversation: session.conversationStateSnapshot });
     });
-    app.get("/agent/codex/models", route(async (_req, res) => res.json({ ok: true, ...(await listCodexModels(emit)) })));
+    app.get("/agent/codex/models", route(async (_req, res) => {
+        const models = canvasChannelModels();
+        if (models.length) return res.json({ ok: true, data: models, nextCursor: null });
+        res.json({ ok: true, ...(await listCodexModels(emit)) });
+    }));
+    app.get("/agent/canvas-channel", (_req, res) => res.json({ ok: true, channel: publicChannelConfig() }));
+    app.post("/agent/canvas-channel", codexMutation(async (req, res) => {
+        const channel = setCanvasChannelConfig({
+            channelId: String(req.body?.channelId || ""),
+            channelName: String(req.body?.channelName || ""),
+            baseUrl: String(req.body?.baseUrl || ""),
+            apiKey: String(req.body?.apiKey || ""),
+            model: String(req.body?.model || ""),
+        });
+        await reloadCodexApp(emit);
+        res.json({ ok: true, channel, models: canvasChannelModels() });
+    }));
+    app.post("/agent/canvas-channel/clear", codexMutation(async (_req, res) => {
+        clearCanvasChannelConfig();
+        await reloadCodexApp(emit);
+        res.json({ ok: true, channel: null, ...(await listCodexModels(emit)) });
+    }));
     app.get("/agent/codex/skills", route(async (req, res) => {
         const workspace = ensureSiteWorkspace(config);
         const result = await listCodexSkills(emit, workspace.workspacePath, String(req.query.forceReload || "") === "1");

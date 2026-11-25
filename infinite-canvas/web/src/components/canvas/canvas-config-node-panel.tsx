@@ -138,7 +138,7 @@ export function CanvasConfigNodePanel({ node, isRunning, inputSummary, onConfigC
             </div>
 
             <div className="mt-auto flex justify-end pt-2">
-                <NewApiGenerationCost config={config} mode={mode} count={Number(config.count) || 1} hasVideoReference={inputSummary.videoCount > 0} />
+                <NewApiGenerationCost config={config} mode={mode} count={Number(config.count) || 1} hasVideoReference={inputSummary.videoCount > 0} referenceImageCount={inputSummary.imageCount} />
             </div>
             <div className="mt-1 flex items-center gap-2">
                 {mode === "image" || mode === "video" ? (

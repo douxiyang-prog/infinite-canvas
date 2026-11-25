@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { App, Button, Input, Segmented, Select, Tooltip } from "antd";
 import copyToClipboard from "copy-to-clipboard";
 import { Copy, KeyRound, Link2, PlugZap } from "lucide-react";
@@ -14,6 +14,7 @@ const AGENT_MCP_REMOVE_COMMAND = "codex mcp remove infinite-canvas";
 
 type DshConfig = { provider: string; model: string; hasApiKey: boolean; available?: boolean; runtime: "dsh" | "ark" | "canvas" };
 type AgentRuntimeInfo = { protocolVersion?: number; runtime: "codex" | "dsh" | "ark" | "canvas" };
+type CanvasAgentChannel = { channelId?: string; channelName?: string; baseUrl?: string; model?: string; hasApiKey?: boolean };
 
 function absoluteChannelBaseUrl(value: string) {
     const trimmed = value.trim();
@@ -59,7 +60,12 @@ export function AgentConnectView({
     const [savingCanvasChannel, setSavingCanvasChannel] = useState(false);
     const autoAppliedCanvasChannelRef = useRef("");
     const channels = useConfigStore((state) => state.config.channels);
-    const canvasChannels = channels.filter((channel) => channel.baseUrl.trim() && channel.apiKey.trim() && channel.models.some((model) => model.capability === "text"));
+    const codexRuntime = agentRuntime?.runtime === "codex";
+    const canvasChannels = useMemo(
+        () => channels.filter((channel) => channel.baseUrl.trim() && channel.apiKey.trim() && channel.models.some((model) => model.capability === "text") && (!codexRuntime || channel.apiFormat === "openai")),
+        [channels, codexRuntime],
+    );
+    const canvasChannelRuntime = codexRuntime || dshConfig?.runtime === "canvas";
     const selectedCanvasChannel = canvasChannels.find((channel) => channel.id === canvasChannelId) || null;
     const selectedCanvasChannelBaseUrl = selectedCanvasChannel ? absoluteChannelBaseUrl(selectedCanvasChannel.baseUrl) : "";
     const runtimeOptions = [
@@ -85,14 +91,14 @@ export function AgentConnectView({
         };
     }, [connected, token, url]);
     useEffect(() => {
-        if (dshConfig?.runtime !== "canvas" || canvasChannelId || !canvasChannels.length) return;
+        if (!canvasChannelRuntime || (canvasChannelId && canvasChannels.some((channel) => channel.id === canvasChannelId)) || !canvasChannels.length) return;
         const savedChannelId = localStorage.getItem("canvas-agent-canvas-channel-id") || "";
         const channel = canvasChannels.find((item) => item.id === savedChannelId) || canvasChannels[0];
         const textModels = channel.models.filter((model) => model.capability === "text");
         const savedModel = localStorage.getItem("canvas-agent-canvas-model") || "";
         setCanvasChannelId(channel.id);
         setCanvasModel(textModels.some((model) => model.name === savedModel) ? savedModel : textModels[0]?.name || "");
-    }, [canvasChannelId, canvasChannels, dshConfig?.runtime]);
+    }, [canvasChannelId, canvasChannels, canvasChannelRuntime]);
     const steps = [{ title: t("agent.connect.pluginTitle"), text: t("agent.connect.pluginText") }, { title: t("agent.connect.directTitle"), text: t("agent.connect.directText"), command: "npx -y @basketikun/canvas-agent@latest" }];
     const statusText = connectError ? t("agent.status.failed") : connected ? activity : enabled ? t("agent.status.connecting") : t("agent.status.disconnected");
     const statusColor = connectError ? "#dc2626" : connected ? "#16a34a" : enabled ? "#d97706" : theme.node.muted;
@@ -196,19 +202,25 @@ export function AgentConnectView({
         }
     };
     useEffect(() => {
-        if (!connected || dshConfig?.runtime !== "canvas" || !selectedCanvasChannel || !canvasModel) {
+        if (!connected || !canvasChannelRuntime || !selectedCanvasChannel || !canvasModel) {
             autoAppliedCanvasChannelRef.current = "";
             return;
         }
         const channel = selectedCanvasChannel;
+        const savedChannelId = localStorage.getItem("canvas-agent-canvas-channel-id") || "";
+        const savedModel = localStorage.getItem("canvas-agent-canvas-model") || "";
+        if (codexRuntime && (savedChannelId !== channel.id || savedModel !== canvasModel)) {
+            autoAppliedCanvasChannelRef.current = "";
+            return;
+        }
         const baseUrl = absoluteChannelBaseUrl(channel.baseUrl);
-        const key = `${channel.id}\0${canvasModel}\0${baseUrl}`;
+        const key = `${codexRuntime ? "codex" : "canvas"}\0${channel.id}\0${canvasModel}\0${baseUrl}`;
         if (autoAppliedCanvasChannelRef.current === key) return;
         autoAppliedCanvasChannelRef.current = key;
         let active = true;
         void (async () => {
             try {
-                const current = await fetchAgentJson<{ channel?: { channelId?: string; baseUrl?: string; model?: string } }>(url.trim().replace(/\/$/, ""), token.trim(), "/agent/canvas-channel");
+                const current = await fetchAgentJson<{ channel?: CanvasAgentChannel | null }>(url.trim().replace(/\/$/, ""), token.trim(), "/agent/canvas-channel");
                 if (!active) return;
                 if (current.channel?.channelId === channel.id && current.channel.baseUrl === baseUrl && current.channel.model === canvasModel) {
                     rememberCanvasChannel(channel, canvasModel);
@@ -223,7 +235,7 @@ export function AgentConnectView({
             active = false;
             if (autoAppliedCanvasChannelRef.current === key) autoAppliedCanvasChannelRef.current = "";
         };
-    }, [canvasModel, connected, dshConfig?.runtime, selectedCanvasChannel, token, url]);
+    }, [canvasChannelRuntime, canvasModel, codexRuntime, connected, selectedCanvasChannel, token, url]);
     const codexPluginReminder = (
         <div className="rounded-lg border px-3 py-2.5 text-xs leading-5" style={{ borderColor: theme.node.stroke, color: theme.node.muted }}>
             <div className="font-medium" style={{ color: theme.node.text }}>
@@ -246,6 +258,44 @@ export function AgentConnectView({
                     </div>
                 ))}
             </div>
+        </div>
+    );
+    const canvasChannelPicker = (
+        <div className="mt-3 space-y-2">
+            <Select
+                className="w-full"
+                value={canvasChannelId || undefined}
+                placeholder={t("agent.connect.dshCanvasChannel")}
+                options={canvasChannels.map((channel) => ({ label: `${channel.name} · ${channel.baseUrl}`, value: channel.id }))}
+                onChange={(value) => {
+                    const channel = canvasChannels.find((item) => item.id === value);
+                    const textModels = channel?.models.filter((model) => model.capability === "text") || [];
+                    setCanvasChannelId(value);
+                    setCanvasModel(textModels[0]?.name || "");
+                }}
+            />
+            <div className="flex items-center gap-2">
+                <Select
+                    className="min-w-0 flex-1"
+                    value={canvasModel || undefined}
+                    placeholder={t("agent.connect.dshCanvasModel")}
+                    options={selectedCanvasChannel?.models.filter((model) => model.capability === "text").map((model) => ({ label: model.name, value: model.name })) || []}
+                    onChange={setCanvasModel}
+                />
+                <Button className="!h-8 !shrink-0 !px-3" type="primary" loading={savingCanvasChannel} disabled={!selectedCanvasChannel || !canvasModel} onClick={() => void saveCanvasChannel()}>
+                    {t("agent.connect.dshCanvasSave")}
+                </Button>
+            </div>
+            {selectedCanvasChannel ? (
+                <div className="truncate text-[11px] leading-5" style={{ color: theme.node.muted }} title={selectedCanvasChannelBaseUrl}>
+                    Base URL: {selectedCanvasChannelBaseUrl}
+                </div>
+            ) : null}
+            {!canvasChannels.length ? (
+                <div className="text-xs leading-5" style={{ color: theme.node.muted }}>
+                    {t("agent.connect.dshCanvasMissing")}
+                </div>
+            ) : null}
         </div>
     );
     return (
@@ -288,7 +338,7 @@ export function AgentConnectView({
                             size="small"
                             className="mb-3"
                             value={dshConfig.runtime}
-                            loading={changingRuntime}
+                            disabled={changingRuntime}
                             onChange={(value) => void changeRuntime(value as "dsh" | "ark" | "canvas")}
                             options={runtimeOptions}
                         />
@@ -369,9 +419,7 @@ export function AgentConnectView({
                                 {t("agent.connect.dshCodexActive")}
                             </span>
                         </div>
-                        <div className="mt-2 text-[11px] leading-5" style={{ color: theme.node.muted }}>
-                            {t("agent.connect.dshCodexManagerHint")}
-                        </div>
+                        {canvasChannelPicker}
                     </div>
                 ) : null}
                 <div className="rounded-lg border p-3" style={{ borderColor: theme.node.stroke }}>

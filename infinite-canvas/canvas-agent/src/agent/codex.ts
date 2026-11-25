@@ -80,6 +80,16 @@ export async function interruptCodexTurn(threadId?: string) {
     return await codexApp.interruptCurrentTurn(threadId);
 }
 
+/** provider 变更后重建 Codex app-server，让下一次线程启动或恢复使用最新配置。 */
+export async function reloadCodexApp(emit: AgentEmit) {
+    if (codexAppStart) await codexAppStart.catch(() => undefined);
+    const current = codexApp;
+    codexApp = null;
+    loadedThreadId = "";
+    current?.close();
+    return await getCodexApp(emit);
+}
+
 /** 回复当前 app-server 的待处理权限请求。 */
 export async function resolveCodexApproval(requestId: string, decision: string) {
     return Boolean(codexApp?.resolveApproval(requestId, decision));
@@ -468,9 +478,15 @@ async function resumeLoadedThread(app: CodexAppClient, threadId: string, cwd?: s
 /** 获取已启动的 Codex app-server 客户端。 */
 async function getCodexApp(emit: AgentEmit) {
     if (codexApp) return codexApp;
+    let started: CodexAppClient | null = null;
     codexAppStart ||= CodexAppClient.start(emit, () => {
-        codexApp = null;
-        loadedThreadId = "";
+        if (!started || codexApp === started) {
+            codexApp = null;
+            loadedThreadId = "";
+        }
+    }).then((app) => {
+        started = app;
+        return app;
     });
     try {
         codexApp = await codexAppStart;

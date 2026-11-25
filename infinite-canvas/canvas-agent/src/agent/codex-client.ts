@@ -11,6 +11,7 @@ import { field, type JsonRecord } from "../utils/value.js";
 import { codexEventHistory, type CodexEventHistory } from "./codex-event-history.js";
 import type { CodexNotificationParams, CodexPlanUpdate, CodexReasoningEffort, CodexRequestMethod, CodexRequestParams, CodexRequestResult, CodexSkillSelector, CodexTurnInput } from "./codex-protocol.js";
 import type { AgentEmit, AgentPermissionMode } from "./types.js";
+import { codexCanvasProviderConfig } from "./canvas-channel.js";
 
 type AgentEvent = JsonRecord & { type: string; usage?: unknown };
 type PendingRequest = { resolve: (value: unknown) => void; reject: (error: Error) => void; silent?: boolean };
@@ -62,6 +63,7 @@ export class CodexAppClient {
     private preheatingThreadIds = new Set<string>();
     private failing = false;
     private failureMessage = "";
+    private intentionallyClosed = false;
 
     /** 保存 app-server 子进程和事件出口。 */
     private constructor(private child: ChildProcess, private emit: AgentEmit, private eventHistory: Pick<CodexEventHistory, "record" | "recordTurn"> = codexEventHistory) {}
@@ -89,6 +91,11 @@ export class CodexAppClient {
         });
         child.on("error", (error) => {
             stderr.flush();
+            if (client.intentionallyClosed) {
+                client.failAll("Codex app-server restarted", true);
+                stop();
+                return;
+            }
             logger.error("Codex app-server process error", error);
             emit("agent_error", { message: error.message });
             client.failAll(error.message, true);
@@ -96,6 +103,11 @@ export class CodexAppClient {
         });
         child.on("exit", (code) => {
             stderr.flush();
+            if (client.intentionallyClosed) {
+                client.failAll("Codex app-server restarted", true);
+                stop();
+                return;
+            }
             logger.warn("Codex app-server exited", { code });
             client.failAll(`Codex app-server exited: ${code ?? 0}`);
             stop();
@@ -104,6 +116,13 @@ export class CodexAppClient {
         await client.request("initialize", { clientInfo: { name: "canvas-agent", title: "Infinite Canvas Agent", version: VERSION }, capabilities: { experimentalApi: true, requestAttestation: false } });
         client.notify("initialized");
         return client;
+    }
+
+    /** 主动结束当前 app-server，供 provider 切换后重新加载配置。 */
+    close() {
+        if (this.intentionallyClosed) return;
+        this.intentionallyClosed = true;
+        this.child.kill();
     }
 
     /** 创建新的 Codex 线程。 */
@@ -787,7 +806,12 @@ function canvasAgentMcpCommand() {
 
 /** 生成 Codex app-server 使用的 MCP 配置。 */
 function codexConfig(permissionMode: AgentPermissionMode) {
-    return { model_reasoning_summary: "auto", ...(permissionMode === "automatic" ? { approvals_reviewer: "auto_review" } : {}), mcp_servers: { "infinite-canvas": { command: canvasAgentMcp.command, args: canvasAgentMcp.args, ...("env" in canvasAgentMcp ? { env: canvasAgentMcp.env } : {}), default_tools_approval_mode: "approve", startup_timeout_sec: 20, tool_timeout_sec: 90 } } };
+    return {
+        model_reasoning_summary: "auto",
+        ...(codexCanvasProviderConfig() || {}),
+        ...(permissionMode === "automatic" ? { approvals_reviewer: "auto_review" } : {}),
+        mcp_servers: { "infinite-canvas": { command: canvasAgentMcp.command, args: canvasAgentMcp.args, ...("env" in canvasAgentMcp ? { env: canvasAgentMcp.env } : {}), default_tools_approval_mode: "approve", startup_timeout_sec: 20, tool_timeout_sec: 90 } },
+    };
 }
 
 function threadSettings(permissionMode: AgentPermissionMode) {
@@ -798,7 +822,7 @@ function skillDraftThreadSettings(cwd: string) {
     return {
         approvalPolicy: "never" as const,
         sandbox: "read-only" as const,
-        config: { model_reasoning_summary: "auto", mcp_servers: {} },
+        config: { model_reasoning_summary: "auto", ...(codexCanvasProviderConfig() || {}), mcp_servers: {} },
         cwd,
         developerInstructions: SKILL_DRAFT_INSTRUCTIONS,
         ephemeral: true,

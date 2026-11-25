@@ -3,6 +3,7 @@ import test from "node:test";
 
 import { CodexAppClient } from "./codex-client.js";
 import { assertDraftHasNoSensitiveValues, canvasSkillSource, isCodexThreadId, isRecoverableThreadError } from "./codex.js";
+import { clearCanvasChannelConfig, setCanvasChannelConfig } from "./canvas-channel.js";
 
 type TestClient = {
     currentThreadId: string;
@@ -18,6 +19,42 @@ type TestClient = {
 };
 
 const emptyEventHistory = { record: () => Promise.resolve(), recordTurn: () => Promise.resolve() };
+
+test("Codex thread config uses the selected Canvas text-model channel", async () => {
+    const writes: Array<Record<string, unknown>> = [];
+    const events: Array<{ type: string; payload: unknown }> = [];
+    const child = { stdin: { write: (line: string) => (writes.push(JSON.parse(line)), true) } };
+    const client = Reflect.construct(CodexAppClient, [child, (type: string, payload: unknown) => events.push({ type, payload }), emptyEventHistory]) as CodexAppClient;
+    const testClient = client as unknown as TestClient;
+    setCanvasChannelConfig({
+        channelId: "channel-1",
+        channelName: "New API",
+        baseUrl: "https://example.com/v1",
+        apiKey: "sk-secret",
+        model: "deepseek-flash",
+    });
+    try {
+        const starting = client.startThread("D:\\site");
+        const request = writes.find((item) => item.method === "thread/start");
+        assert.ok(request);
+        const config = (request?.params as { config?: Record<string, unknown> })?.config;
+        assert.equal(config?.model, "deepseek-flash");
+        assert.equal(config?.model_provider, "canvas_channel");
+        assert.deepEqual(config?.model_providers, {
+            canvas_channel: {
+                name: "Canvas - New API",
+                base_url: "https://example.com/v1",
+                wire_api: "responses",
+                experimental_bearer_token: "sk-secret",
+            },
+        });
+        testClient.handle({ id: request?.id, result: { thread: { id: "thread-1" } } });
+        await starting;
+        assert.equal(JSON.stringify(events).includes("sk-secret"), false);
+    } finally {
+        clearCanvasChannelConfig();
+    }
+});
 
 test("Codex 会话 ID 校验拒绝其他 Agent 后端的历史 ID", () => {
     assert.equal(isCodexThreadId("01a1f887-2eb1-7302-b0aa-988bb95111ec"), true);

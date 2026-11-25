@@ -12,9 +12,10 @@ type NewApiGenerationCostProps = {
     mode: CanvasGenerationMode;
     count: number;
     hasVideoReference?: boolean;
+    referenceImageCount?: number;
 };
 
-export function NewApiGenerationCost({ config, mode, count, hasVideoReference = false }: NewApiGenerationCostProps) {
+export function NewApiGenerationCost({ config, mode, count, hasVideoReference = false, referenceImageCount = 0 }: NewApiGenerationCostProps) {
     const { t, i18n } = useTranslation();
     const channel = resolveModelChannel(config, config.model);
     const [estimate, setEstimate] = useState<GenerationCostEstimate | null>(null);
@@ -30,7 +31,7 @@ export function NewApiGenerationCost({ config, mode, count, hasVideoReference = 
         let disposed = false;
         const controller = new AbortController();
         setLoading(true);
-        void fetchGenerationCost({ config: { ...config, baseUrl: channel.baseUrl, apiKey: channel.apiKey }, mode, count, hasVideoReference, signal: controller.signal })
+        void fetchGenerationCost({ config: { ...config, baseUrl: channel.baseUrl, apiKey: channel.apiKey }, mode, count, hasVideoReference, referenceImageCount, signal: controller.signal })
             .then((nextEstimate) => {
                 if (disposed) return;
                 setEstimate(nextEstimate);
@@ -46,7 +47,7 @@ export function NewApiGenerationCost({ config, mode, count, hasVideoReference = 
             disposed = true;
             controller.abort();
         };
-    }, [channel.apiKey, channel.baseUrl, config.model, config.size, config.videoDurationMode, config.videoGenerateAudio, config.videoSeconds, config.vquality, count, hasVideoReference, mode]);
+    }, [channel.apiKey, channel.baseUrl, config.model, config.size, config.videoDurationMode, config.videoGenerateAudio, config.videoSeconds, config.vquality, count, hasVideoReference, mode, referenceImageCount]);
 
     if (mode !== "image" && mode !== "video") return null;
 
@@ -72,6 +73,7 @@ export function NewApiGenerationCost({ config, mode, count, hasVideoReference = 
                 <div className="space-y-1 py-0.5">
                     <div className="font-medium">{t(mode === "video" ? "costEstimate.videoTitle" : "costEstimate.title")}</div>
                     <div>{detail}</div>
+                    {estimate?.source ? <div className="opacity-70">{estimate.source}</div> : null}
                     <div className="opacity-70">{t("costEstimate.channel", { channel: channel.name })}</div>
                 </div>
             }
