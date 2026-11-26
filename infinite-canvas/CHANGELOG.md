@@ -2,6 +2,7 @@
 
 ## Unreleased
 
++ [调整] 顶部“可见渠道余额”列表按剩余额度从高到低自动排序；无限额度优先，读取失败或尚未返回的渠道置底。当前模型渠道无法读取余额时，顶部徽标回退显示余额最高的可用渠道并标注其名称。
 + [修复] 画布费用预估优先读取任务插件计费表达式，并按当前输出尺寸和参考图数量计算 Doubao Seedream 的 1.5K 上下档位；插件无法计算时才回退到普通模型价格。
 + [新增] Codex 后端可直接使用 Canvas 中选中的文本渠道：在 Agent 连接面板选择渠道和模型后，Codex 通过线程级 provider 调用对应 Base URL 和 API Key，Key 仅保存在本机 Agent 进程内存，不写入 `~/.codex/config.toml`。
 + [新增] Canvas Agent Manager 新增代理开关，可填写地址、端口和直连域名；启用后同时设置 Windows 系统代理并向 Agent 子进程注入 `HTTP_PROXY` / `HTTPS_PROXY` / `NO_PROXY`，关闭时恢复原有系统代理并清除继承的代理环境变量。

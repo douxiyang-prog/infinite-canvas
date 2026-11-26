@@ -1,5 +1,5 @@
 import type { CSSProperties } from "react";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Popover } from "antd";
 import { Coins, LoaderCircle, RefreshCw } from "lucide-react";
 import { useTranslation } from "react-i18next";
@@ -17,6 +17,20 @@ type CreditUsage = {
     unlimited: boolean;
 };
 
+function sortChannelsByUsage(channels: ModelChannel[], balances: Record<string, CreditUsage | null | undefined>) {
+    return channels
+        .map((item, index) => ({ item, index, usage: balances[item.id] }))
+        .sort((left, right) => {
+            if (!left.usage && !right.usage) return left.index - right.index;
+            if (!left.usage) return 1;
+            if (!right.usage) return -1;
+            const leftRemaining = left.usage.unlimited ? Number.POSITIVE_INFINITY : Math.max(0, left.usage.total - left.usage.used);
+            const rightRemaining = right.usage.unlimited ? Number.POSITIVE_INFINITY : Math.max(0, right.usage.total - right.usage.used);
+            return rightRemaining - leftRemaining || left.index - right.index;
+        })
+        .map(({ item }) => item);
+}
+
 export function NewApiCreditBadge({ variant = "default" }: { variant?: "default" | "canvas" }) {
     const { t, i18n } = useTranslation();
     const colorTheme = useThemeStore((state) => state.theme);
@@ -25,21 +39,22 @@ export function NewApiCreditBadge({ variant = "default" }: { variant?: "default"
     const channels = config.channels.filter((channel) => channel.baseUrl.trim() && channel.apiKey.trim());
     const channel = resolveModelChannel(config, config.model || config.imageModel || config.videoModel || config.textModel || config.audioModel);
     const [usage, setUsage] = useState<CreditUsage | null>(null);
+    const [usageChannelId, setUsageChannelId] = useState(channel.id);
     const [channelBalances, setChannelBalances] = useState<Record<string, CreditUsage | null>>({});
     const [loadingIds, setLoadingIds] = useState<Set<string>>(new Set());
     const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
     const [open, setOpen] = useState(false);
     const [refreshKey, setRefreshKey] = useState(0);
     const [listRefreshKey, setListRefreshKey] = useState(0);
+    const sortedChannels = useMemo(() => sortChannelsByUsage(channels, channelBalances), [channels, channelBalances]);
+    const usageChannel = channels.find((item) => item.id === usageChannelId) || channel;
     const iconStyle: CSSProperties | undefined = variant === "canvas" ? { color: theme.node.text } : undefined;
     const remaining = usage ? Math.max(0, usage.total - usage.used) : 0;
     const remainingText = usage ? (usage.unlimited ? "∞" : formatCredit(remaining, usage.displayType, i18n.resolvedLanguage === "zh-CN")) : "--";
     const totalText = usage ? (usage.unlimited ? "∞" : formatCredit(usage.total, usage.displayType, i18n.resolvedLanguage === "zh-CN")) : "--";
     const exactRemainingText = usage ? (usage.unlimited ? t("topNav.creditUsageUnlimited") : formatExactCredit(remaining, usage.displayType, i18n.resolvedLanguage === "zh-CN")) : "--";
     const exactTotalText = usage ? (usage.unlimited ? t("topNav.creditUsageUnlimited") : formatExactCredit(usage.total, usage.displayType, i18n.resolvedLanguage === "zh-CN")) : "--";
-    const label = usage
-        ? t("topNav.creditUsageLabel", { remaining: exactRemainingText, total: exactTotalText, channel: channel.name })
-        : t(status === "error" ? "topNav.creditUsageUnavailable" : "topNav.creditUsageLoading");
+    const label = usage ? t("topNav.creditUsageLabel", { remaining: exactRemainingText, total: exactTotalText, channel: usageChannel.name }) : t(status === "error" ? "topNav.creditUsageUnavailable" : "topNav.creditUsageLoading");
 
     useEffect(() => {
         let disposed = false;
@@ -47,16 +62,39 @@ export function NewApiCreditBadge({ variant = "default" }: { variant?: "default"
 
         const refresh = async () => {
             controller?.abort();
-            controller = new AbortController();
+            const requestController = new AbortController();
+            controller = requestController;
             if (!disposed) setStatus("loading");
             try {
-                const nextUsage = await fetchCreditUsage(channel, controller.signal);
+                const nextUsage = await fetchCreditUsage(channel, requestController.signal);
                 if (disposed) return;
                 setUsage(nextUsage);
+                setUsageChannelId(channel.id);
                 setStatus("ready");
             } catch (error) {
                 if (disposed || (error instanceof DOMException && error.name === "AbortError")) return;
+                const balances: Record<string, CreditUsage | null> = {};
+                await Promise.all(
+                    channels.map(async (availableChannel) => {
+                        try {
+                            balances[availableChannel.id] = await fetchCreditUsage(availableChannel, requestController.signal);
+                        } catch {
+                            balances[availableChannel.id] = null;
+                        }
+                    }),
+                );
+                if (disposed || requestController.signal.aborted) return;
+                setChannelBalances((current) => ({ ...current, ...balances }));
+                const leader = sortChannelsByUsage(channels, balances).find((item) => balances[item.id]);
+                const leaderUsage = leader ? balances[leader.id] : null;
+                if (leader && leaderUsage) {
+                    setUsage(leaderUsage);
+                    setUsageChannelId(leader.id);
+                    setStatus("ready");
+                    return;
+                }
                 setUsage(null);
+                setUsageChannelId(channel.id);
                 setStatus("error");
             }
         };
@@ -71,7 +109,7 @@ export function NewApiCreditBadge({ variant = "default" }: { variant?: "default"
             window.clearInterval(timer);
             window.removeEventListener("focus", refreshOnFocus);
         };
-    }, [channel.baseUrl, channel.apiKey, refreshKey]);
+    }, [channel.baseUrl, channel.apiKey, channels.map((item) => `${item.id}:${item.baseUrl}:${item.apiKey}`).join("|"), refreshKey]);
 
     useEffect(() => {
         if (!open) return;
@@ -126,7 +164,7 @@ export function NewApiCreditBadge({ variant = "default" }: { variant?: "default"
             </div>
             <div className="space-y-1">
                 {channels.length ? (
-                    channels.map((item) => {
+                    sortedChannels.map((item) => {
                         const itemUsage = channelBalances[item.id];
                         const loading = loadingIds.has(item.id);
                         const text = loading
@@ -155,13 +193,7 @@ export function NewApiCreditBadge({ variant = "default" }: { variant?: "default"
 
     return (
         <Popover content={popoverContent} trigger="click" placement="bottomRight" open={open} onOpenChange={setOpen}>
-            <button
-                type="button"
-                className="group inline-flex h-7 shrink-0 cursor-pointer items-center gap-1.5 rounded-md px-1.5 text-xs transition-colors hover:bg-black/5 dark:hover:bg-white/10"
-                style={iconStyle}
-                aria-label={label}
-                title={label}
-            >
+            <button type="button" className="group inline-flex h-7 shrink-0 cursor-pointer items-center gap-1.5 rounded-md px-1.5 text-xs transition-colors hover:bg-black/5 dark:hover:bg-white/10" style={iconStyle} aria-label={label} title={label}>
                 {status === "loading" ? <LoaderCircle className="size-3.5 animate-spin opacity-70" /> : <Coins className="size-3.5 opacity-70" />}
                 <span className="font-semibold tabular-nums">{remainingText}</span>
                 <span className="opacity-45">/</span>
