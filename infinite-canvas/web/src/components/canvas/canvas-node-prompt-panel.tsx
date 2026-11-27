@@ -36,6 +36,7 @@ type CanvasNodePromptPanelProps = {
     onDisconnectReference?: (fromNodeId: string, toNodeId: string) => void;
     onStartReferenceSelection?: (nodeId: string) => void;
     onImageSettingsOpenChange?: (open: boolean) => void;
+    smartSource?: { width?: number; height?: number } | null;
     modeOverride?: CanvasNodeGenerationMode; // Plugin nodes set their generation type through useBuiltinPanel.mode.
 };
 
@@ -52,6 +53,7 @@ export function CanvasNodePromptPanel({
     onDisconnectReference,
     onStartReferenceSelection,
     onImageSettingsOpenChange,
+    smartSource,
     modeOverride,
 }: CanvasNodePromptPanelProps) {
     const { t } = useTranslation();
@@ -134,6 +136,7 @@ export function CanvasNodePromptPanel({
                                 onConfigChange={(key, value) => onConfigChange(node.id, key === "count" ? { count: Number(value) || 1 } : { [key]: value })}
                                 onMissingConfig={() => openConfigDialog(true)}
                                 onOpenChange={onImageSettingsOpenChange}
+                                smartSource={smartSource}
                             />
                         </>
                     ) : mode === "video" ? (

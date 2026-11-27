@@ -7,7 +7,7 @@ import { nanoid } from "nanoid";
 import { dataUrlToFile, readImageMeta } from "@/lib/image-utils";
 import { buildImageReferencePromptText } from "@/lib/image-reference-prompt";
 import { imageToDataUrl } from "@/services/image-storage";
-import { computeSourceImageSize, imageSizePresets, inferMediaScale, isSmartImageSize } from "@/lib/media-size";
+import { imageSizePresets, inferMediaScale, isSmartImageSize, matchSourceImageSize, SMART_IMAGE_MAX_PIXELS, SMART_IMAGE_MAX_RATIO } from "@/lib/media-size";
 import type { ReferenceImage } from "@/types/image";
 
 const apiText = (key: string, options?: Record<string, unknown>) => i18n.t(`apiErrors.${key}`, options);
@@ -103,7 +103,7 @@ const IMAGE_SIZE_STEP = 16;
 const IMAGE_MIN_PIXELS = 655360;
 const IMAGE_MAX_PIXELS = 8294400;
 const IMAGE_MAX_EDGE = 3840;
-const IMAGE_MAX_RATIO = 3;
+const IMAGE_MAX_RATIO = SMART_IMAGE_MAX_RATIO;
 const IMAGE_OUTPUT_FORMAT = "png";
 // 与 image-storage 的下载超时保持一致，避免接口挂起时节点一直停在生成中。
 const IMAGE_REQUEST_TIMEOUT_MS = 10 * 60_000;
@@ -160,9 +160,16 @@ async function resolveRequestedImageSize(size: string, references: ReferenceImag
     if (!isSmartImageSize(size)) return size;
     const source = references.find((reference) => Boolean(reference.dataUrl || reference.url || reference.storageKey));
     if (!source) return "auto";
-    if (source.width && source.height) return computeSourceImageSize(source.width, source.height);
+    if (source.width && source.height) return resolveSmartImageSize(source.width, source.height);
     const meta = await readImageMeta(await imageToDataUrl(source));
-    return computeSourceImageSize(meta.width, meta.height);
+    return resolveSmartImageSize(meta.width, meta.height);
+}
+
+function resolveSmartImageSize(width: number, height: number) {
+    const match = matchSourceImageSize(width, height);
+    if (!match) return "auto";
+    if (match.exceedsLimit) throw new Error(apiText("smartImagePixelLimit", { size: `${match.target.width}x${match.target.height}`, pixels: match.pixels.toLocaleString(), max: SMART_IMAGE_MAX_PIXELS.toLocaleString() }));
+    return `${match.target.width}x${match.target.height}`;
 }
 
 function validateImageSize(width: number, height: number) {

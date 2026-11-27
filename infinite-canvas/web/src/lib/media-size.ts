@@ -1,6 +1,8 @@
 export const mediaScaleOptions = ["1k", "2k", "4k", "auto"] as const;
 export const SMART_IMAGE_SIZE = "smart";
+export const SMART_IMAGE_MIN_PIXELS = 921600;
 export const SMART_IMAGE_MAX_PIXELS = 4624220;
+export const SMART_IMAGE_MAX_RATIO = 16;
 export const mediaRatioOptions = [
     { value: "1:1", width: 1, height: 1 },
     { value: "2:3", width: 2, height: 3 },
@@ -35,11 +37,23 @@ export function parseAspectRatio(value: string) {
     return { width, height };
 }
 
+export function matchSourceImageSize(width: number, height: number) {
+    const size = computeSourceImageSize(width, height);
+    const dimensions = parsePixelSize(size);
+    if (!dimensions) return null;
+    return {
+        source: { width, height },
+        target: dimensions,
+        pixels: dimensions.width * dimensions.height,
+        exceedsLimit: dimensions.width * dimensions.height > SMART_IMAGE_MAX_PIXELS,
+    };
+}
+
 /** Keep the source ratio while producing an image size accepted by the image request API. */
 export function computeSourceImageSize(width: number, height: number) {
     if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) return "auto";
     const step = 16;
-    const minPixels = 655360;
+    const minPixels = SMART_IMAGE_MIN_PIXELS;
     const maxPixels = SMART_IMAGE_MAX_PIXELS;
     const maxEdge = 3840;
     const sourceLongEdge = Math.max(width, height);
@@ -64,7 +78,7 @@ export function computeSourceImageSize(width: number, height: number) {
         const multiplier = Math.max(minMultiplier, Math.min(maxMultiplier, preferredMultiplier));
         return `${unitWidth * multiplier}x${unitHeight * multiplier}`;
     }
-    const ratio = Math.min(3, sourceRatio);
+    const ratio = Math.min(SMART_IMAGE_MAX_RATIO, sourceRatio);
     const landscape = width >= height;
     let longEdge = Math.min(maxEdge, Math.max(1024, targetLongEdge));
     let shortEdge = longEdge / ratio;
@@ -232,7 +246,8 @@ function closestGridSize(targetWidth: number, targetHeight: number, sourceRatio:
             if ((width >= height) !== landscape) continue;
             const pixels = width * height;
             if (pixels < minPixels || pixels > maxPixels) continue;
-            const ratioError = Math.abs(width / height / sourceRatio - 1);
+            const currentRatio = landscape ? width / height : height / width;
+            const ratioError = Math.abs(currentRatio / sourceRatio - 1);
             const areaError = Math.abs(Math.log(pixels / (targetWidth * targetHeight)));
             const score = ratioError + areaError * 0.001;
             if (!best || score < best.score) best = { width, height, score };

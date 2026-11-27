@@ -3493,6 +3493,7 @@ function InfiniteCanvasPage() {
                     isRunning={runningNodeId === panelNode.id}
                     mentionReferences={mentionReferencesByNodeId.get(panelNode.id) || EMPTY_REFERENCES}
                     connectedNodes={connectedNodesByNodeId.get(panelNode.id) || []}
+                    smartSource={firstImageSourceForNode(panelNode, nodes, connections)}
                     onPromptChange={handleNodePromptChange}
                     onConfigChange={handleConfigNodeChange}
                     onGenerate={handleGenerateNode}
@@ -3508,6 +3509,7 @@ function InfiniteCanvasPage() {
             ),
         [
             configInputsById,
+            connections,
             confirmStopGeneration,
             connectedNodesByNodeId,
             disconnectNodeReference,
@@ -3528,6 +3530,7 @@ function InfiniteCanvasPage() {
                 node={contentNode}
                 isRunning={runningNodeId === contentNode.id}
                 inputSummary={getInputSummary(configInputsById.get(contentNode.id) || [])}
+                smartSource={firstImageSourceForNode(contentNode, nodes, connections)}
                 onConfigChange={handleConfigNodeChange}
                 onComposerToggle={() => setDialogNodeId((current) => (current === contentNode.id ? null : contentNode.id))}
                 onStop={confirmStopGeneration}
@@ -3537,7 +3540,7 @@ function InfiniteCanvasPage() {
                 }}
             />
         ),
-        [configInputsById, confirmStopGeneration, handleConfigNodeChange, handleGenerateNode, runningNodeId],
+        [configInputsById, confirmStopGeneration, connections, handleConfigNodeChange, handleGenerateNode, nodes, runningNodeId],
     );
 
     const hoverPreviewNode = hoverPreviewNodeId ? nodeById.get(hoverPreviewNodeId) || null : null;
@@ -3928,4 +3931,10 @@ function InfiniteCanvasPage() {
             </section>
         </main>
     );
+}
+
+function firstImageSourceForNode(node: CanvasNodeData, nodes: CanvasNodeData[], connections: CanvasConnection[]) {
+    const prompt = node.metadata?.composerContent ?? node.metadata?.prompt ?? "";
+    const image = buildNodeGenerationContext(node.id, nodes, connections, prompt).referenceImages[0];
+    return image ? { width: image.width, height: image.height } : null;
 }

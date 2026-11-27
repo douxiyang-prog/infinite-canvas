@@ -5,7 +5,7 @@ import { useTranslation } from "react-i18next";
 
 import i18n from "@/i18n";
 import { type CanvasTheme } from "@/lib/canvas-theme";
-import { computeMediaSize, inferMediaRatio, inferMediaScale, isSmartImageSize, mediaRatioOptions, mediaScaleOptions, readMediaDimensions, SMART_IMAGE_SIZE } from "@/lib/media-size";
+import { computeMediaSize, inferMediaRatio, inferMediaScale, isSmartImageSize, matchSourceImageSize, mediaRatioOptions, mediaScaleOptions, readMediaDimensions, SMART_IMAGE_MAX_PIXELS, SMART_IMAGE_SIZE } from "@/lib/media-size";
 import type { AiConfig } from "@/stores/use-config-store";
 
 const qualityOptions = [
@@ -30,9 +30,10 @@ type ImageSettingsPanelProps = {
     className?: string;
     maxCount?: number;
     quickCount?: number;
+    smartSource?: { width?: number; height?: number } | null;
 };
 
-export function ImageSettingsPanel({ config, onConfigChange, theme, showTitle = true, className = "w-[320px] space-y-4 rounded-2xl px-1 py-0.5", maxCount = 15, quickCount = 10 }: ImageSettingsPanelProps) {
+export function ImageSettingsPanel({ config, onConfigChange, theme, showTitle = true, className = "w-[320px] space-y-4 rounded-2xl px-1 py-0.5", maxCount = 15, quickCount = 10, smartSource }: ImageSettingsPanelProps) {
     const { t } = useTranslation();
     const [snapDimensionToStep, setSnapDimensionToStep] = useState(true);
     const quality = config.quality || "auto";
@@ -42,6 +43,7 @@ export function ImageSettingsPanel({ config, onConfigChange, theme, showTitle = 
     const selectedScale = inferMediaScale(activeSize);
     const selectedRatio = inferMediaRatio(activeSize);
     const dimensions = readMediaDimensions(activeSize, selectedScale, selectedRatio);
+    const smartMatch = smartSource?.width && smartSource.height ? matchSourceImageSize(smartSource.width, smartSource.height) : null;
     const applySize = (scale: string, ratio: string) => onConfigChange("size", computeMediaSize(scale, ratio));
     const selectScale = (scale: string) => applySize(scale, selectedRatio === "auto" ? "1:1" : selectedRatio);
     const selectRatio = (ratio: string) => applySize(selectedScale, ratio);
@@ -122,9 +124,26 @@ export function ImageSettingsPanel({ config, onConfigChange, theme, showTitle = 
                         ))}
                     </div>
                     {selectedRatio === SMART_IMAGE_SIZE ? (
-                        <p className="text-xs leading-5" style={{ color: theme.node.muted }}>
-                            {t("settingsPanels.image.smartRatioHint")}
-                        </p>
+                        <div className="rounded-lg px-3 py-2 text-xs leading-5" style={{ background: theme.node.fill, color: theme.node.muted }}>
+                            <p>{t("settingsPanels.image.smartRatioHint")}</p>
+                            {smartMatch ? (
+                                <div className="mt-1.5 space-y-0.5">
+                                    <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
+                                        <span>{t("settingsPanels.image.smartRatioMatch")}</span>
+                                        <span className="font-medium" style={{ color: theme.node.text }}>
+                                            {smartMatch.source.width}×{smartMatch.source.height} → {smartMatch.target.width}×{smartMatch.target.height}
+                                        </span>
+                                    </div>
+                                    <div className={smartMatch.exceedsLimit ? "text-red-600 dark:text-red-400" : ""}>
+                                        {smartMatch.exceedsLimit
+                                            ? t("settingsPanels.image.smartRatioExceeds", { pixels: smartMatch.pixels.toLocaleString(), max: SMART_IMAGE_MAX_PIXELS.toLocaleString() })
+                                            : t("settingsPanels.image.smartRatioPixels", { pixels: smartMatch.pixels.toLocaleString(), max: SMART_IMAGE_MAX_PIXELS.toLocaleString() })}
+                                    </div>
+                                </div>
+                            ) : (
+                                <p className="mt-1.5">{t("settingsPanels.image.smartRatioNoReference")}</p>
+                            )}
+                        </div>
                     ) : null}
                 </div>
                 <div className="flex items-center justify-between gap-3">
